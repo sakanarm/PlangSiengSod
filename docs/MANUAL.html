@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>คู่มือ Voice Changer</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --surface: #ffffff; --text: #1d1d1f; --muted: #5f6368; --line: #e2e2de;
+    --accent: #0b5cad; --accent-soft: #e8f0fa; --warn-soft: #fff4e0; --warn: #8a5300;
+    --orange: #b36b00; --green: #1a7f37; --blue: #0b5cad; --red: #c62828; --code-bg: #f0f0ec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #161618; --surface: #1f1f22; --text: #ececec; --muted: #a0a0a6; --line: #34343a;
+      --accent: #6ea8ff; --accent-soft: #1d2a3d; --warn-soft: #33270f; --warn: #f2c26b;
+      --orange: #f0a540; --green: #4cc06d; --blue: #6ea8ff; --red: #ff6b6b; --code-bg: #2a2a2e;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #161618; --surface: #1f1f22; --text: #ececec; --muted: #a0a0a6; --line: #34343a;
+    --accent: #6ea8ff; --accent-soft: #1d2a3d; --warn-soft: #33270f; --warn: #f2c26b;
+    --orange: #f0a540; --green: #4cc06d; --blue: #6ea8ff; --red: #ff6b6b; --code-bg: #2a2a2e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.7 "Leelawadee UI", "Segoe UI", Tahoma, sans-serif;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 32px 16px 64px; }
+  header h1 { font-size: 1.9rem; margin: 0 0 4px; line-height: 1.3; }
+  header p { margin: 0; color: var(--muted); }
+  nav.toc {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px 18px; margin: 24px 0 8px;
+  }
+  nav.toc strong { display: block; margin-bottom: 4px; }
+  nav.toc ol { margin: 0; padding-left: 22px; columns: 2; column-gap: 32px; }
+  @media (max-width: 600px) { nav.toc ol { columns: 1; } }
+  a { color: var(--accent); }
+  section { margin-top: 40px; }
+  h2 { font-size: 1.35rem; border-bottom: 2px solid var(--line); padding-bottom: 6px; margin: 0 0 14px; }
+  h3 { font-size: 1.08rem; margin: 22px 0 6px; }
+  code, kbd {
+    font-family: Consolas, "Cascadia Mono", monospace; font-size: .9em;
+    background: var(--code-bg); border-radius: 4px; padding: 1px 5px; overflow-wrap: anywhere;
+  }
+  pre {
+    background: var(--code-bg); border-radius: 8px; padding: 12px 14px; overflow-x: auto;
+    font: 14px/1.5 Consolas, "Cascadia Mono", monospace; margin: 8px 0;
+  }
+  pre code { background: none; padding: 0; }
+  .btn {
+    display: inline-block; border: 1px solid var(--line); background: var(--surface);
+    border-radius: 5px; padding: 0 7px; font-size: .92em; white-space: nowrap; font-weight: 600;
+  }
+  .note, .warn {
+    border-radius: 8px; padding: 10px 14px; margin: 14px 0; border-left: 4px solid var(--accent);
+    background: var(--accent-soft);
+  }
+  .warn { border-left-color: var(--warn); background: var(--warn-soft); }
+  .flow {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 16px 0;
+    font-size: .95rem;
+  }
+  .flow span.box {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px;
+  }
+  .flow span.box.hl { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+  .flow span.arrow { color: var(--muted); }
+  ol.steps { padding-left: 22px; }
+  ol.steps li { margin: 6px 0; }
+  .table-wrap { overflow-x: auto; margin: 10px 0; }
+  table { border-collapse: collapse; width: 100%; background: var(--surface); font-size: .95rem; }
+  th, td { border: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--code-bg); }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+  footer { margin-top: 48px; color: var(--muted); font-size: .9rem; border-top: 1px solid var(--line); padding-top: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>คู่มือการใช้งาน Real-Time Voice Changer</h1>
+  <p>เวอร์ชัน 0.1 (lite) · เปลี่ยนเสียงพูดเป็นเสียงหุ่นยนต์แบบ real time แล้วส่งเข้า Microsoft Teams</p>
+</header>
+
+<nav class="toc" aria-label="สารบัญ">
+  <strong>สารบัญ</strong>
+  <ol>
+    <li><a href="#what">โปรแกรมนี้ทำอะไร</a></li>
+    <li><a href="#install">ติดตั้ง (ทำครั้งเดียว)</a></li>
+    <li><a href="#open">เปิดโปรแกรม</a></li>
+    <li><a href="#quick">เริ่มใช้งานใน 5 ขั้นตอน</a></li>
+    <li><a href="#screen">หน้าจอ Voice ทีละส่วน</a></li>
+    <li><a href="#teams">ตั้งค่า Microsoft Teams</a></li>
+    <li><a href="#record">บันทึกเสียงเป็นไฟล์</a></li>
+    <li><a href="#hardware">แท็บ Hardware</a></li>
+    <li><a href="#commands">คำสั่งเพิ่มเติม</a></li>
+    <li><a href="#trouble">แก้ปัญหา</a></li>
+    <li><a href="#files">ไฟล์ของโปรแกรมและความเป็นส่วนตัว</a></li>
+  </ol>
+</nav>
+
+<section id="what">
+  <h2>1. โปรแกรมนี้ทำอะไร</h2>
+  <p>โปรแกรมรับเสียงจากไมค์ แปลงเป็นเสียงหุ่นยนต์ทันทีขณะที่คุณพูด แล้วส่งต่อไปยังสายเสียงเสมือน
+    <b>VB-CABLE</b> ซึ่ง Teams จะมองเห็นเป็นไมโครโฟนตัวหนึ่ง</p>
+  <div class="flow" role="img" aria-label="ไมค์จริง ไปยังโปรแกรมนี้ ไปยัง CABLE Input ไปยัง CABLE Output ไปยัง Teams">
+    <span class="box">ไมค์จริง</span><span class="arrow">→</span>
+    <span class="box hl">โปรแกรมนี้ (เสียง robot)</span><span class="arrow">→</span>
+    <span class="box">CABLE Input</span><span class="arrow">⇒ VB-CABLE ⇒</span>
+    <span class="box">CABLE Output</span><span class="arrow">→</span>
+    <span class="box">Teams</span>
+  </div>
+  <ul>
+    <li><b>เป็นแบบ real time</b> ไม่ต้องอัดเป็นไฟล์ก่อน ความหน่วงรวมประมาณ ¼ วินาที (ค่าจริงของเครื่องคุณดูได้ในโปรแกรม)</li>
+    <li><b>เสียง robot v1 เป็นเอฟเฟกต์เสียง (DSP) ไม่ได้ใช้ AI</b> จึงไม่ต้องโหลดโมเดลและไม่ต้องใช้การ์ดจอ</li>
+    <li>โหมดเสียง AI (RVC) ยังอยู่ระหว่างพัฒนา เลยกดเลือกในโปรแกรมไม่ได้</li>
+  </ul>
+  <div class="warn">ใช้อย่างโปร่งใส: บอกผู้ร่วมประชุมว่าคุณกำลังใช้เอฟเฟกต์เปลี่ยนเสียง
+    อย่าใช้เพื่อปลอมตัวเป็นคนอื่นหรือทำให้คนอื่นเข้าใจผิดว่าใครเป็นคนพูด</div>
+</section>
+
+<section id="install">
+  <h2>2. ติดตั้ง (ทำครั้งเดียว)</h2>
+  <h3>สิ่งที่ต้องมี</h3>
+  <ul>
+    <li>Windows 10 หรือ 11 (64-bit) ไม่ต้องมีการ์ดจอ NVIDIA</li>
+    <li>Python 3.12 (64-bit) จาก python.org</li>
+    <li><b>VB-CABLE</b> จาก <code>https://vb-audio.com/Cable/</code> คุณต้องติดตั้งเอง
+      (ใช้สิทธิ์ administrator และ<b>ต้องรีบูต</b>เครื่องหลังติดตั้ง) โปรแกรมนี้ไม่ติดตั้งไดรเวอร์ให้เอง</li>
+  </ul>
+  <h3>ติดตั้งโปรแกรม</h3>
+  <p>เปิด PowerShell ในโฟลเดอร์ <code>realtimevoice</code> (ดูวิธีในหัวข้อถัดไป) แล้วรัน:</p>
+  <pre><code>powershell -ExecutionPolicy Bypass -File .\setup.ps1</code></pre>
+  <p>ใช้พื้นที่ประมาณ 260 MB ทั้งหมดอยู่ในโฟลเดอร์ <code>.venv</code> ในโปรเจกต์ ถ้าลบโฟลเดอร์นี้แล้วต้องรัน setup ใหม่</p>
+</section>
+
+<section id="open">
+  <h2>3. เปิดโปรแกรม</h2>
+  <ol class="steps">
+    <li>เปิด File Explorer แล้วเข้าไปที่โฟลเดอร์ <code>realtimevoice</code> (โฟลเดอร์ที่มีไฟล์ <code>run.ps1</code>)</li>
+    <li>คลิกช่อง address bar ด้านบน พิมพ์ <code>powershell</code> แล้วกด <kbd>Enter</kbd>
+      จะได้หน้าต่าง PowerShell ที่อยู่ในโฟลเดอร์นี้แล้ว</li>
+    <li>รันคำสั่ง:
+      <pre><code>powershell -ExecutionPolicy Bypass -File .\run.ps1</code></pre></li>
+  </ol>
+  <p>อย่าปิดหน้าต่าง PowerShell ระหว่างใช้งาน เพราะจะทำให้โปรแกรมปิดตาม</p>
+</section>
+
+<section id="quick">
+  <h2>4. เริ่มใช้งานใน 5 ขั้นตอน</h2>
+  <ol class="steps">
+    <li><b>Microphone (input)</b> เลือกไมค์จริงของคุณ</li>
+    <li>กด <span class="btn">Use VB-CABLE</span> ช่อง <b>Output → Teams</b> จะเปลี่ยนเป็น
+      <code>CABLE Input (VB-Audio Virtual Cable)</code> ให้เอง</li>
+    <li>เลือก <b>Robot voice v1</b> แล้วกด <span class="btn">Start</span> สถานะจะเปลี่ยนเป็น
+      <span style="color:var(--blue);font-weight:600">Processing</span> สีน้ำเงิน</li>
+    <li>ใน Teams ไปที่ Settings → Devices → Microphone แล้วเลือก <b>CABLE Output (VB-Audio Virtual Cable)</b></li>
+    <li>บอกผู้ร่วมประชุมว่ากำลังใช้เอฟเฟกต์เสียง</li>
+  </ol>
+  <div class="note">โปรแกรมจะจำอุปกรณ์และค่าที่ตั้งไว้ทุกครั้งที่กด Start และตอนปิดโปรแกรม เปิดครั้งหน้าไม่ต้องตั้งใหม่</div>
+</section>
+
+<section id="screen">
+  <h2>5. หน้าจอ Voice ทีละส่วน</h2>
+
+  <h3>แถบสถานะ (Status) ด้านบน</h3>
+  <div class="table-wrap"><table>
+    <tr><th>สถานะ</th><th>ความหมาย</th></tr>
+    <tr><td><span class="dot" style="background:var(--orange)"></span>Not configured</td><td>ยังตั้งค่าไม่ครบหรือตั้งผิด สาเหตุจะแสดงอยู่ข้างๆ เช่น ยังไม่ได้เลือก output</td></tr>
+    <tr><td><span class="dot" style="background:var(--green)"></span>Ready</td><td>ตั้งค่าครบแล้ว กด Start ได้</td></tr>
+    <tr><td><span class="dot" style="background:var(--blue)"></span>Processing</td><td>กำลังแปลงเสียงและส่งออกอยู่</td></tr>
+    <tr><td><span class="dot" style="background:var(--red)"></span>Error</td><td>เกิดปัญหาและหยุดทำงาน เช่น ถอดไมค์ออก ดูรายละเอียดในช่อง Messages</td></tr>
+  </table></div>
+
+  <h3>กรอบ Voice (โหมดเสียง)</h3>
+  <div class="table-wrap"><table>
+    <tr><th>ตัวเลือก</th><th>ทำอะไร</th></tr>
+    <tr><td>Robot voice v1</td><td>เสียงหุ่นยนต์ ระดับเสียงคงที่ตามค่า Robot pitch</td></tr>
+    <tr><td>Pass-through</td><td>ส่งเสียงจริงผ่านไปโดยไม่แปลง ใช้ทดสอบว่าเส้นทางเสียงถึง Teams</td></tr>
+    <tr><td>AI voice (RVC model)</td><td>ยังใช้ไม่ได้ในเวอร์ชันนี้</td></tr>
+  </table></div>
+  <p>แถบปรับเสียง robot (ใช้ได้เฉพาะโหมด Robot):</p>
+  <div class="table-wrap"><table>
+    <tr><th>แถบ</th><th>ช่วงค่า (ค่าเริ่มต้น)</th><th>ผล</th><th>มีผลเมื่อ</th></tr>
+    <tr><td>Robot pitch (Hz)</td><td>40–400 (110)</td><td>ระดับเสียงหุ่นยนต์ ค่าต่ำเสียงทุ้ม ค่าสูงเสียงแหลม</td><td>กด Stop แล้ว Start ใหม่</td></tr>
+    <tr><td>Metallic wobble (Hz, 0=off)</td><td>0–200 (30)</td><td>ความเร็วของเสียงสั่นแบบโลหะ ตั้ง 0 เพื่อปิด</td><td>ทันที</td></tr>
+    <tr><td>Wobble amount</td><td>0–1 (0.30)</td><td>ความแรงของเสียงสั่น</td><td>ทันที</td></tr>
+  </table></div>
+
+  <h3>กรอบ Audio routing (เส้นทางเสียง)</h3>
+  <div class="table-wrap"><table>
+    <tr><th>ช่อง / ปุ่ม</th><th>ใช้ทำอะไร</th></tr>
+    <tr><td>Microphone (input)</td><td>ไมค์จริง <b>ห้ามเลือก CABLE Output</b> เพราะจะเกิดเสียงวนกลับ (feedback) และโปรแกรมจะไม่ยอมให้เริ่ม</td></tr>
+    <tr><td>Output → Teams</td><td>เลือก <code>CABLE Input (VB-Audio Virtual Cable)</code> (อย่าเลือกตัวที่มีคำว่า 16ch)</td></tr>
+    <tr><td>Monitor (headphones)</td><td>ถ้าอยากได้ยินเสียง robot ของตัวเอง ให้เลือกหูฟัง ถ้าใช้ลำโพงจะเกิดเสียงสะท้อน ไม่ใช้ให้ตั้งเป็น <code>(off)</code></td></tr>
+    <tr><td><span class="btn">Refresh devices</span></td><td>โหลดรายการอุปกรณ์ใหม่ เช่น หลังเสียบไมค์หรือหูฟัง (ต้องกด Stop ก่อน)</td></tr>
+    <tr><td><span class="btn">Use VB-CABLE</span></td><td>ตั้ง Output เป็น CABLE Input ให้อัตโนมัติ</td></tr>
+    <tr><td><span class="btn">Test beep → output</span></td><td>เล่นเสียงบี๊บไปที่ output ถ้าเป็น CABLE Input แถบระดับเสียงของ CABLE Output ใน Windows Sound settings หรือใน Teams ควรขยับ</td></tr>
+    <tr><td><span class="btn">Test beep → monitor</span></td><td>เล่นเสียงบี๊บที่หูฟัง เพื่อเช็กว่าเลือกถูกตัว</td></tr>
+  </table></div>
+
+  <h3>กรอบ Levels &amp; output</h3>
+  <ul>
+    <li><b>แถบ Input / Output</b> แสดงความดัง (dBFS) ของเสียงเข้าและเสียงออก สีเขียวคือปกติ
+      สีเหลืองคือค่อนข้างดัง สีแดงคือดังเกินจนเสียงอาจแตก</li>
+    <li><b>Output gain (dB)</b> −24 ถึง +12 ใช้เพิ่มหรือลดเสียงที่ส่งออก ถ้าแถบ Output ขึ้นสีแดงบ่อยให้ลดลง</li>
+    <li><b>Noise gate (dB, −60=off)</b> ตัดเสียงที่เบากว่าค่านี้ เช่นเสียงพัดลมตอนไม่ได้พูด
+      ลองเริ่มที่ −45 ถ้าตั้งสูงเกินไปเสียงพูดจะขาดหาย</li>
+  </ul>
+
+  <h3>ปุ่มควบคุมและตัวเลขสถิติ</h3>
+  <ul>
+    <li><span class="btn">Start</span> เริ่มแปลงเสียง โปรแกรมจะตรวจการตั้งค่าก่อน ถ้ามีปัญหาจะบอกในช่อง Messages</li>
+    <li><span class="btn">Stop</span> หยุดแปลงเสียง (ถ้ากำลังอัดเสียงอยู่จะบันทึกไฟล์ให้ด้วย)</li>
+    <li><span class="btn">● Record</span> บันทึกเสียงที่แปลงแล้วเป็นไฟล์ ดู<a href="#record">หัวข้อ 7</a></li>
+  </ul>
+  <p>ข้อความข้างปุ่มเป็นค่าที่วัดจริงขณะทำงาน:</p>
+  <div class="table-wrap"><table>
+    <tr><th>ค่า</th><th>ความหมาย</th><th>ค่าที่ดี</th></tr>
+    <tr><td>processing … ms</td><td>เวลาที่ใช้แปลงเสียงแต่ละช่วง (ช่วงละ 50 ms)</td><td>น้อยกว่า 50 มาก</td></tr>
+    <tr><td>RTF</td><td>เวลาประมวลผลเทียบกับเวลาจริง</td><td>น้อยกว่า 1</td></tr>
+    <tr><td>latency ~… ms + device</td><td>ความหน่วงในโปรแกรม บวกกับความหน่วงของอุปกรณ์ที่ Windows รายงาน</td><td>—</td></tr>
+    <tr><td>dropped</td><td>ช่วงเสียงที่ต้องทิ้งเพราะประมวลผลไม่ทัน</td><td>0</td></tr>
+    <tr><td>underruns</td><td>จังหวะที่เสียงขาดช่วง ได้ยินเป็นเสียงกระตุก</td><td>0 หรือเพิ่มขึ้นช้ามาก</td></tr>
+    <tr><td>errors</td><td>จำนวนครั้งที่ประมวลผลผิดพลาด</td><td>0</td></tr>
+    <tr><td>CPU / RAM</td><td>การใช้ CPU ของทั้งเครื่องและของโปรแกรม และหน่วยความจำที่โปรแกรมใช้</td><td>—</td></tr>
+  </table></div>
+
+  <h3>ช่อง Messages</h3>
+  <p>แสดงสิ่งที่โปรแกรมทำ คำเตือน และข้อผิดพลาด พร้อมคำแนะนำวิธีแก้ (บรรทัดที่ขึ้นต้นด้วย <code>-&gt;</code>)</p>
+</section>
+
+<section id="teams">
+  <h2>6. ตั้งค่า Microsoft Teams</h2>
+  <ol class="steps">
+    <li>ใน Teams กด <b>…</b> (Settings and more) → <b>Settings</b> → <b>Devices</b></li>
+    <li><b>Microphone</b>: เลือก <code>CABLE Output (VB-Audio Virtual Cable)</code></li>
+    <li><b>Speaker</b>: เลือกหูฟังหรือลำโพงตามปกติ <b>ห้ามเลือก CABLE</b></li>
+    <li><b>Noise suppression</b>: ตั้งเป็น <b>Off</b> หรือ <b>Low</b> เพราะระบบตัดเสียงรบกวนของ Teams อาจตัดเสียงหึ่งของ robot จนขาดเป็นช่วงๆ</li>
+    <li>กด <b>Make a test call</b> เพื่อฟังเสียงที่คนอื่นจะได้ยิน</li>
+  </ol>
+  <div class="note">ถ้าไม่เจอ CABLE Output ใน Teams ให้ปิด Teams แล้วเปิดใหม่ (หลังจากติดตั้ง VB-CABLE และรีบูตแล้ว)
+    ระหว่างประชุมเปลี่ยนกลับไปใช้ไมค์จริงใน Teams ได้ทุกเมื่อ</div>
+
+  <h3>ทดสอบก่อนเข้าประชุมจริง</h3>
+  <p><b>ขั้นที่ 1: เช็กว่าเสียงไปถึง VB-CABLE (ยังไม่ต้องเปิด Teams)</b></p>
+  <ol class="steps">
+    <li>ในโปรแกรมนี้ กด <span class="btn">Start</span> แล้วพูด แถบ <b>Output</b> ต้องขยับ</li>
+    <li>เปิด Windows Settings → System → Sound → Input → เลือก <b>CABLE Output</b>
+      ตอนพูด แถบระดับเสียงของ CABLE Output ต้องขยับ ถ้าขยับแสดงว่าเสียงไปถึงสายเสมือนแล้ว</li>
+  </ol>
+  <p><b>ขั้นที่ 2: ฟังเสียงตัวเองผ่าน Teams (test call)</b></p>
+  <ol class="steps">
+    <li>ให้โปรแกรมนี้อยู่ในสถานะ Processing ไว้</li>
+    <li>ใน Teams ไปที่ Settings → Devices ตั้ง Microphone เป็น <b>CABLE Output</b>
+      ตอนพูด แถบระดับเสียงใต้ช่อง Microphone ใน Teams ควรขยับ</li>
+    <li>กด <b>Make a test call</b> แล้วพูดหลังเสียงสัญญาณ
+      Teams จะเล่นเสียงที่อัดไว้กลับมาให้ฟัง เสียงนั้นคือเสียงที่คนในประชุมจะได้ยิน</li>
+    <li>ระหว่าง test call ให้ตั้ง <b>Monitor</b> ในโปรแกรมนี้เป็น <code>(off)</code>
+      จะได้ไม่สับสนกับเสียงตัวเองที่ได้ยินจากหูฟัง</li>
+  </ol>
+  <p><b>ขั้นที่ 3 (ไม่บังคับ): ลองกับเพื่อน</b> สร้างประชุมด้วย <b>Meet now</b> แล้วชวนเพื่อนหรือใช้บัญชี/อุปกรณ์อีกเครื่องเข้าร่วม
+    เพื่อฟังเสียงจากอีกฝั่งจริงๆ ถ้าทดสอบด้วยมือถือในห้องเดียวกัน ให้ปิดเสียงลำโพงมือถือหรือใส่หูฟัง จะได้ไม่มีเสียงหอน</p>
+  <div class="note">บางบัญชีหรือบางเวอร์ชันของ Teams (เช่น Teams แบบส่วนตัว/ฟรี) อาจไม่มีปุ่ม Make a test call ให้ใช้ขั้นที่ 3 แทน</div>
+</section>
+
+<section id="record">
+  <h2>7. บันทึกเสียงเป็นไฟล์</h2>
+  <ol class="steps">
+    <li>กด <span class="btn">Start</span> ให้โปรแกรมทำงานก่อน (ปุ่ม Record จะกดได้หลังจากนั้น)</li>
+    <li>กด <span class="btn">● Record</span> แล้วเลือกที่เก็บไฟล์ ชื่อไฟล์จะตั้งตามวันเวลาให้อัตโนมัติ เช่น
+      <code>rtvc_20261017_143005.wav</code> โฟลเดอร์เริ่มต้นคือ <code>realtimevoice\recordings\</code></li>
+    <li>พูดได้เลย ปุ่มจะแสดงเวลาที่อัดไปแล้ว เช่น <span class="btn">■ Stop recording (12 s)</span></li>
+    <li>กด <span class="btn">■ Stop recording</span> (หรือกด Stop) เพื่อจบ ช่อง Messages จะแสดงตำแหน่งไฟล์</li>
+  </ol>
+  <ul>
+    <li>ไฟล์ที่ได้คือเสียงที่ส่งออกไป Teams ทุกอย่าง รวมถึง gain ด้วย</li>
+    <li>รูปแบบไฟล์เป็น WAV 48 kHz, mono, 16-bit เปิดได้กับโปรแกรมเล่นเสียงทั่วไป</li>
+    <li>ระหว่างอัด เสียงยังส่งเข้า Teams ตามปกติ</li>
+    <li>ไฟล์อยู่ในเครื่องเท่านั้น ไม่มีการอัปโหลด และจะอัดก็ต่อเมื่อคุณกดปุ่มเท่านั้น</li>
+  </ul>
+  <div class="warn">ถ้าจะอัดเสียงคนอื่นในการประชุม ต้องขออนุญาตก่อน (ปุ่มนี้อัดเฉพาะเสียงของคุณที่แปลงแล้ว ไม่ได้อัดเสียงคนอื่นในประชุม)</div>
+</section>
+
+<section id="hardware">
+  <h2>8. แท็บ Hardware</h2>
+  <ul>
+    <li><span class="btn">Run diagnostics</span> แสดงข้อมูลเครื่อง ได้แก่ เวอร์ชัน Windows, CPU, RAM, การ์ดจอ,
+      อุปกรณ์เสียง และสถานะว่าติดตั้ง VB-CABLE แล้วหรือยัง ใช้แนบไปตอนขอความช่วยเหลือได้</li>
+    <li><span class="btn">Test GPU (DirectML) inference</span> ทดสอบว่าการ์ดจอประมวลผล AI ได้จริงไหม
+      ปุ่มนี้ใช้ได้เฉพาะเมื่อติดตั้งส่วนเสริม AI แล้ว ส่วนเสียง robot ไม่ต้องใช้การ์ดจอ</li>
+  </ul>
+</section>
+
+<section id="commands">
+  <h2>9. คำสั่งเพิ่มเติม (รันในโฟลเดอร์ realtimevoice)</h2>
+  <div class="table-wrap"><table>
+    <tr><th>คำสั่ง</th><th>ทำอะไร</th></tr>
+    <tr><td><code>powershell -ExecutionPolicy Bypass -File .\run.ps1</code></td><td>เปิดโปรแกรม</td></tr>
+    <tr><td><code>… .\run.ps1 -CableTest</code></td><td>ทดสอบ VB-CABLE ด้วยเสียงบี๊บ และลองแปลงเสียงจากไมค์ 5 วินาที แล้วแสดงผลว่า PASS หรือ FAIL</td></tr>
+    <tr><td><code>… .\run.ps1 -Diagnostics</code></td><td>แสดงรายงานฮาร์ดแวร์ในหน้าต่าง PowerShell</td></tr>
+    <tr><td><code>… .\run.ps1 -Test</code></td><td>รัน unit test (ต้องติดตั้งด้วย <code>setup.ps1 -Dev</code> ก่อน)</td></tr>
+  </table></div>
+</section>
+
+<section id="trouble">
+  <h2>10. แก้ปัญหา</h2>
+  <div class="table-wrap"><table>
+    <tr><th>อาการ</th><th>วิธีแก้</th></tr>
+    <tr><td>สถานะเป็น Not configured</td><td>อ่านเหตุผลที่แสดงข้างสถานะ ส่วนใหญ่เกิดจากยังไม่ได้เลือก output ให้กด Use VB-CABLE</td></tr>
+    <tr><td>"VB-CABLE was not found"</td><td>ติดตั้ง VB-CABLE แล้ว<b>รีบูต</b> จากนั้นกด Refresh devices</td></tr>
+    <tr><td>Error "Feedback loop"</td><td>ช่อง Microphone เลือกเป็น CABLE Output อยู่ ให้เปลี่ยนเป็นไมค์จริง</td></tr>
+    <tr><td>Teams ไม่ได้ยินเสียง</td><td>ไมค์ใน Teams ต้องเป็น <b>CABLE Output</b> และ Output ในโปรแกรมต้องเป็น <b>CABLE Input</b> (ไม่ใช่ตัว 16ch)
+      สถานะต้องเป็น Processing และแถบ Output ต้องขยับ ลองกด Test beep → output ด้วย</td></tr>
+    <tr><td>แถบ Input ไม่ขยับ</td><td>ไปที่ Windows Settings → Privacy &amp; security → Microphone แล้วเปิดสิทธิ์ให้ desktop apps
+      เช็กว่าเลือกไมค์ถูกตัว และไมค์ไม่ได้ถูกปิดเสียงด้วยปุ่มบนเครื่อง</td></tr>
+    <tr><td>เสียง robot ใน Teams ขาดเป็นช่วงๆ</td><td>ตั้ง Noise suppression ใน Teams เป็น Off หรือ Low</td></tr>
+    <tr><td>เสียงแตกหรือกระตุก และค่า underruns เพิ่มขึ้น</td><td>เครื่องทำงานหนักเกินไป ให้ปิดโปรแกรมที่ใช้ทรัพยากรมาก
+      หรือแก้ <code>output_prebuffer_blocks</code> ใน <code>config.json</code> จาก 1 เป็น 2 (ความหน่วงจะเพิ่มขึ้นประมาณ 50 ms)</td></tr>
+    <tr><td>"Could not open audio device"</td><td>มีโปรแกรมอื่นจองอุปกรณ์ไว้ ให้ไปที่ Sound Control Panel → เลือกอุปกรณ์ → Advanced →
+      เอาเครื่องหมายออกจาก <i>Allow applications to take exclusive control</i> หรือตั้งเป็น 48000 Hz</td></tr>
+    <tr><td>Error: device stopped / disconnected</td><td>ไมค์หรือหูฟัง USB/Bluetooth หลุด ให้เสียบใหม่ กด Refresh devices แล้ว Start</td></tr>
+    <tr><td>ได้ยินเสียงตัวเองสะท้อน</td><td>Monitor ส่งเสียงออกลำโพงอยู่ ให้ใช้หูฟังหรือตั้ง Monitor เป็น (off)</td></tr>
+    <tr><td>หูฟัง Bluetooth เสียงแย่ลงทันที</td><td>Bluetooth จะสลับไปโหมดคุณภาพต่ำเมื่อใช้ไมค์ของหูฟัง ให้ใช้ไมค์ในตัวโน้ตบุ๊กหรือไมค์แบบสาย/USB แทน</td></tr>
+    <tr><td>เปิดโปรแกรมไม่ขึ้น</td><td>รัน <code>setup.ps1</code> ใหม่ แล้วดูรายละเอียดใน <code>logs\rtvc.log</code></td></tr>
+    <tr><td>อยากล้างค่าที่ตั้งไว้ทั้งหมด</td><td>ปิดโปรแกรมแล้วลบไฟล์ <code>config.json</code> (ไฟล์นี้เก็บแค่ค่าที่ตั้งไว้)</td></tr>
+  </table></div>
+</section>
+
+<section id="files">
+  <h2>11. ไฟล์ของโปรแกรมและความเป็นส่วนตัว</h2>
+  <div class="table-wrap"><table>
+    <tr><th>ไฟล์ / โฟลเดอร์</th><th>เก็บอะไร</th></tr>
+    <tr><td><code>config.json</code></td><td>อุปกรณ์และค่าที่ตั้งไว้</td></tr>
+    <tr><td><code>logs\rtvc.log</code></td><td>บันทึกการทำงานและข้อผิดพลาด (ไม่มีเสียงอยู่ในไฟล์นี้)</td></tr>
+    <tr><td><code>recordings\</code></td><td>ไฟล์เสียงที่คุณกดบันทึก (ถ้าเลือกเก็บที่โฟลเดอร์เริ่มต้น)</td></tr>
+    <tr><td><code>.venv\</code></td><td>Python และไลบรารีของโปรแกรม (~260 MB)</td></tr>
+  </table></div>
+  <ul>
+    <li>เสียงทั้งหมดประมวลผลในเครื่อง ไม่มีการส่งขึ้นอินเทอร์เน็ต</li>
+    <li>ไฟล์เสียงและ config ถูกใส่ไว้ใน <code>.gitignore</code> แล้ว จึงไม่หลุดเข้า git</li>
+  </ul>
+</section>
+
+<footer>คู่มือนี้อยู่ที่ <code>docs\MANUAL.html</code> ในโฟลเดอร์โปรแกรม · เปิดจากโปรแกรมได้ด้วยปุ่ม <span class="btn">Manual / คู่มือ</span> ที่มุมขวาบน</footer>
+</div>
+</body>
+</html>

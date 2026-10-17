@@ -1,0 +1,8 @@
+# Real-Time Voice Changer for Windows - CORE (lite) environment, pinned.
+# Python 3.12 x64. Installed by setup.ps1 into .venv\  (~150 MB)
+# Enough for: audio routing, VB-CABLE/Teams, robot voice (DSP), hardware diagnostics.
+numpy==1.26.4
+scipy==1.14.1
+soundfile==0.13.1
+sounddevice==0.5.2
+psutil==7.0.0

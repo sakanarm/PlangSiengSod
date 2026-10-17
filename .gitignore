@@ -1,0 +1,31 @@
+# Environment
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Local user data - never commit
+config.json
+logs/
+recordings/
+cache/
+assets/
+models/
+datasets/
+*.pth
+*.index
+*.onnx
+*.pt
+*.ckpt
+*.safetensors
+
+# Private recordings
+*.wav
+*.flac
+*.mp3
+*.m4a
+*.ogg
+
+# Secrets
+.env
+*.key
