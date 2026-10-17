@@ -7,7 +7,9 @@ import logging
 import os
 import threading
 import tkinter as tk
+import warnings
 from datetime import datetime
+from pathlib import Path
 from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
@@ -21,6 +23,7 @@ from ..config import THEMES, AppConfig
 from . import fluent as F
 
 logger = logging.getLogger(__name__)
+ASSETS = Path(__file__).parent / "assets"
 
 STATE_COLORS = {"Not configured": F.CAUTION, "Ready": F.SUCCESS, "Processing": F.ACCENT, "Error": F.CRITICAL}
 MONITOR_OFF = "(off)"
@@ -74,6 +77,10 @@ class App:
         ctk.set_appearance_mode(self.cfg.theme)
         self.fonts = F.Fonts()
         root.title("Parroty")
+        try:
+            root.iconbitmap(default=str(ASSETS / "parroty.ico"))   # title bar + taskbar
+        except tk.TclError:
+            logger.warning("App icon not found: %s", ASSETS / "parroty.ico")
         root.configure(fg_color=F.WINDOW)
         # fits a 1080p screen at 125 % scaling with the taskbar; centred in the upper part of the screen
         scale = ctk.ScalingTracker.get_window_scaling(root)
@@ -99,8 +106,14 @@ class App:
         nav.pack_propagate(False)
         brand = ctk.CTkFrame(nav, fg_color="transparent")
         brand.pack(fill="x", padx=8, pady=(8, 18))
-        F.label(brand, F.I_MIC, fn.icon(16), F.ON_ACCENT, fg_color=F.ACCENT, corner_radius=6,
-                width=30, height=30).pack(side="left")
+        self._logo = self._load_logo()
+        if self._logo is not None:
+            with warnings.catch_warnings():      # CTk warns about non-CTkImage images (no Pillow here)
+                warnings.simplefilter("ignore")
+                ctk.CTkLabel(brand, text="", image=self._logo, width=32, height=32).pack(side="left")
+        else:
+            F.label(brand, F.I_MIC, fn.icon(16), F.ON_ACCENT, fg_color=F.ACCENT, corner_radius=6,
+                    width=30, height=30).pack(side="left")
         F.label(brand, "Parroty", fn.body_strong).pack(side="left", padx=(10, 6))
         F.label(brand, "v" + ".".join(__version__.split(".")[:2]), fn.caption, F.TEXT2).pack(side="left", pady=(2, 0))
         self.nav = {}
@@ -311,6 +324,15 @@ class App:
         self.diag.insert("end", "Press 'Run diagnostics'.")
 
     # ================================================================ helpers
+    def _load_logo(self):
+        """Parroty logo for the nav pane, pre-sized for the display scaling (tk PhotoImage reads PNG)."""
+        want = 32 * ctk.ScalingTracker.get_widget_scaling(self.root)
+        size = min((32, 40, 48, 64), key=lambda px: abs(px - want))
+        try:
+            return tk.PhotoImage(master=self.root, file=str(ASSETS / f"parroty_{size}.png"))
+        except tk.TclError:
+            return None
+
     def show_page(self, key):
         for k, p in self.pages.items():
             if k == key:
@@ -726,7 +748,12 @@ def main():
                         handlers=[RotatingFileHandler(paths.LOGS_DIR / "rtvc.log", maxBytes=2_000_000,
                                                       backupCount=3, encoding="utf-8"), logging.StreamHandler()])
     logger.info("Starting Parroty %s", __version__)
-    root = ctk.CTk()            # CustomTkinter enables per-monitor DPI awareness itself
+    try:    # own taskbar entry with the Parroty icon instead of being grouped under python.exe
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Parroty.VoiceChanger")
+    except Exception:
+        pass
+    root = ctk.CTk()           # CustomTkinter enables per-monitor DPI awareness itself
     try:
         App(root)
     except Exception as e:

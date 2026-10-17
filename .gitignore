@@ -9,7 +9,8 @@ config.json
 logs/
 recordings/
 cache/
-assets/
+# downloaded base models (HuBERT, RMVPE) at the data root; rtvc/ui/assets (app icons) is tracked
+/assets/
 models/
 datasets/
 *.pth
