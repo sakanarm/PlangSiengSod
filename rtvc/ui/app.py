@@ -58,7 +58,7 @@ class App:
         except Exception:
             self.proc = None
 
-        root.title(f"Real-Time Voice Changer {__version__}")
+        root.title(f"Parroty {__version__}")
         root.minsize(720, 620)
         root.protocol("WM_DELETE_WINDOW", self.on_close)
         self._build()
@@ -498,7 +498,7 @@ def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s",
                         handlers=[RotatingFileHandler(paths.LOGS_DIR / "rtvc.log", maxBytes=2_000_000,
                                                       backupCount=3, encoding="utf-8"), logging.StreamHandler()])
-    logger.info("Starting Real-Time Voice Changer %s", __version__)
+    logger.info("Starting Parroty %s", __version__)
     try:
         from ctypes import windll
 
@@ -510,6 +510,6 @@ def main():
         App(root)
     except Exception as e:
         logger.exception("UI failed to start")
-        messagebox.showerror("Voice Changer", f"Failed to start: {e}")
+        messagebox.showerror("Parroty", f"Failed to start: {e}")
         raise
     root.mainloop()

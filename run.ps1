@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Start the Real-Time Voice Changer.
+  Start Parroty (real-time voice changer).
   -Diagnostics : print the hardware/audio report instead of opening the window.
   -Test        : run the unit tests (needs setup.ps1 -Dev).
   -CableTest   : verify the VB-CABLE path with a test tone (+ 5 s robot-voice engine run).

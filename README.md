@@ -1,4 +1,4 @@
-# Real-Time Voice Changer for Windows (Teams via VB-CABLE)
+# Parroty – real-time voice changer for Windows (Teams via VB-CABLE)
 
 Microphone → real-time processing → **VB-CABLE** → Microsoft Teams.
 Runs on a normal Windows 10/11 laptop (Intel CPU/graphics). No NVIDIA GPU, no CUDA.

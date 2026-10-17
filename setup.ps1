@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Set up the Real-Time Voice Changer in .venv (no administrator rights needed).
+  Set up Parroty (real-time voice changer) in .venv (no administrator rights needed).
 
 .DESCRIPTION
   Default (lite, ~260 MB): robot voice, pass-through, VB-CABLE routing, diagnostics.
