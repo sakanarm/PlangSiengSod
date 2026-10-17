@@ -1020,8 +1020,8 @@
             <div class="btnRow"><div><span class="b">Monitor (headphones)</span></div><div>ถ้าอยากได้ยินเสียงที่แปลงแล้วของตัวเอง ให้เลือกหูฟัง ถ้าใช้ลำโพงจะเกิดเสียงสะท้อน ไม่ใช้ให้ตั้งเป็น (off)</div></div>
             <div class="btnRow"><div><span class="b sec">Refresh devices</span></div><div>โหลดรายการอุปกรณ์ใหม่ เช่น หลังเสียบไมค์หรือหูฟัง (ต้องกด Stop ก่อน)</div></div>
             <div class="btnRow"><div><span class="b primary">Use VB-CABLE</span></div><div>ตั้ง Output เป็น CABLE Input ให้อัตโนมัติ</div></div>
-            <div class="btnRow"><div><span class="b sec">Test beep → output</span></div><div>เล่นเสียงบี๊บไปที่ output ถ้าเป็น CABLE Input แถบระดับเสียงของ CABLE Output ใน Windows Sound settings หรือใน Teams ควรขยับ</div></div>
-            <div class="btnRow"><div><span class="b sec">Test beep → monitor</span></div><div>เล่นเสียงบี๊บที่หูฟัง เพื่อเช็กว่าเลือกถูกตัว</div></div>
+            <div class="btnRow"><div><span class="b sec">Test beep → output</span></div><div>เล่นเสียงบี๊บไปที่ output ถ้าเป็น CABLE Input <strong>คุณจะไม่ได้ยินเสียงบี๊บ</strong> เพราะเสียงเข้าสายเสมือนไปหา Teams ให้ดูว่าแถบระดับเสียงของ CABLE Output ใน Windows Sound settings หรือใน Teams ขยับ ถ้าอยากฟังเสียงตัวเองให้ใช้ Test my voice ในหน้า Voice</div></div>
+            <div class="btnRow"><div><span class="b sec">Test beep → monitor</span></div><div>เล่นเสียงบี๊บที่หูฟัง เพื่อเช็กว่าเลือกถูกตัว ต้องเลือกหูฟังในช่อง Monitor ก่อน (ถ้าเป็น (off) โปรแกรมจะแจ้งให้เลือก)</div></div>
           </div>
           <div class="note ok">
             <b class="t">ใช้ไมค์ของหูฟังได้</b>
@@ -1040,6 +1040,7 @@
             <div class="btnRow"><div><span class="b primary">▶ Start</span></div><div>เริ่มแปลงเสียง โปรแกรมจะตรวจการตั้งค่าก่อน ถ้ามีปัญหาจะบอกในหน้า Messages</div></div>
             <div class="btnRow"><div><span class="b">■ Stop</span></div><div>(ปุ่มเดียวกัน) หยุดแปลงเสียง ถ้ากำลังอัดเสียงอยู่จะบันทึกไฟล์ให้ด้วย</div></div>
             <div class="btnRow"><div><span class="b danger">● Record</span></div><div>บันทึกเสียงที่แปลงแล้วเป็นไฟล์ ดูหัวข้อ <a href="#record">09</a></div></div>
+            <div class="btnRow"><div><span class="b">● Speak 5 s</span> <span class="b">▶ Play again</span></div><div>แถว <strong>Test my voice · ทดสอบเสียง</strong> อัดเสียงจากไมค์ 5 วินาทีแล้วเล่นกลับเป็นเสียงที่เลือก ฟังได้ก่อนกด Start ดู <a href="#preview">ฟังเสียงตัวเองก่อนเข้าประชุม</a></div></div>
           </div>
           <p>ตัวเลขใต้แถบระดับเสียงเป็นค่าที่วัดจริงขณะทำงาน:</p>
           <div class="scrollx">
@@ -1176,6 +1177,7 @@
 
           <h3 id="preview">ฟังเสียงตัวเองก่อนเข้าประชุม (คนอื่นจะได้ยินแบบไหน)</h3>
           <div class="btns">
+            <div class="btnRow"><div><span class="b primary">0 · Test my voice</span></div><div>ง่ายที่สุด ไม่ต้องกด Start: หน้า Voice ใต้แถบสถานะ เลือกเสียง กด <span class="b">● Speak 5 s</span> แล้วพูด 5 วินาที (กดซ้ำเพื่อหยุดก่อนได้) โปรแกรมจะเล่นกลับเป็นเสียงที่เลือกทางหูฟัง Monitor หรือลำโพงหลักของ Windows (ไม่ส่งเข้า Teams) จากนั้นเลือกเสียงอื่นหรือปรับแถบ แล้วกด <span class="b">▶ Play again</span> เพื่อฟังประโยคเดิมด้วยเสียงใหม่ได้ทันที เสียงที่อัดเก็บไว้ในหน่วยความจำเท่านั้น ไม่บันทึกเป็นไฟล์ ใช้ไม่ได้ระหว่างที่กด Start อยู่ (ไมค์ถูกใช้งาน)</div></div>
             <div class="btnRow"><div><span class="b">1 · Monitor (headphones)</span></div><div>หน้า Audio devices ตั้ง Monitor เป็นหูฟัง แล้วกด Start ขณะพูดจะได้ยินเสียงที่แปลงแล้วทันที ลองสลับเสียงและปรับแถบไปพร้อมกันได้ <strong>ต้องใช้หูฟัง</strong> ถ้าใช้ลำโพงจะเกิดเสียงสะท้อน เสียงที่ได้ยินคือเสียงเดียวกับที่ส่งเข้า Teams</div></div>
             <div class="btnRow"><div><span class="b danger">2 · ● Record</span></div><div>กด Start → Record → พูด 5–10 วินาที → Stop recording แล้วเปิดไฟล์ .wav ฟัง (หัวข้อ <a href="#record">09</a>) เหมาะกับการเทียบหลายเสียง หรือเมื่อไม่มีหูฟัง</div></div>
             <div class="btnRow"><div><span class="b primary">3 · Make a test call</span></div><div>ใน Teams (ขั้นที่ 2 ด้านล่าง) Teams อัดเสียงที่ได้รับจาก CABLE Output แล้วเล่นกลับให้ฟัง ตรงกับที่คนในประชุมได้ยินที่สุด รวมผลของ Noise suppression ของ Teams ด้วย</div></div>

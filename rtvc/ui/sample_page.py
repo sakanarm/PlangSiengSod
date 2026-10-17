@@ -209,6 +209,9 @@ class SamplePage:
             app.log("Stop processing first: the microphone is in use by the voice changer.", logging.WARNING)
             self._status("Stop processing (Voice page) before recording a sample.")
             return
+        if app.voice_test_recording:
+            self._status("Finish 'Test my voice' (Voice page) first.")
+            return
         mic = dv.find_device(app.devices, app.in_var.get(), app.cfg.host_api, "input")
         if mic is None:
             app.log("Choose your microphone on 'Audio devices' first.", logging.WARNING)
@@ -327,28 +330,6 @@ class SamplePage:
                      f"EQ {eq}" + (f"; {len(notes)} warning(s)" if notes else ""))
 
     # ================================================================ preview
-    def _preview_device(self):
-        """(index or None for the host API default, name) for the preview, never the virtual cable."""
-        import sounddevice as sd
-
-        from .app import MONITOR_OFF
-
-        app = self.app
-        mon = app.mon_var.get()
-        if mon and mon != MONITOR_OFF:
-            d = dv.find_device(app.devices, mon, app.cfg.host_api, "output")
-            if d is not None:
-                return d.index, d.name
-        for api in sd.query_hostapis():
-            if api["name"] == app.cfg.host_api and api.get("default_output_device", -1) >= 0:
-                idx = api["default_output_device"]
-                name = sd.query_devices(idx)["name"]
-                if any(h in name.lower() for h in dv.VIRTUAL_HINTS):
-                    raise RuntimeError(f"the Windows default output is '{name}' (virtual cable); "
-                                       "choose your headphones as Monitor on 'Audio devices'")
-                return idx, name
-        raise RuntimeError("no output device found; choose a Monitor device on 'Audio devices'")
-
     def play(self, which):
         self.stop_playback()
         if which is None or self.recording:
@@ -362,7 +343,7 @@ class SamplePage:
         from ..audio.clips import ClipPlayer
 
         try:
-            idx, name = self._preview_device()
+            idx, name = self.app.preview_output()
             self.player = ClipPlayer(idx, self.app.cfg.host_api, audio, vm.SR)
         except Exception as e:
             self.app.log(f"Preview failed: {e}", logging.WARNING)

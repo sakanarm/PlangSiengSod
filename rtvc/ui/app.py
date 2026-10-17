@@ -14,9 +14,11 @@ from pathlib import Path
 from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
+import numpy as np
 
 from .. import __version__, paths
 from ..audio import custom_voices as cvs
+from ..audio.clips import ClipPlayer, ClipRecorder, render
 from ..audio import devices as dv
 from ..audio.engine import AudioEngine, play_test_tone
 from ..audio.processors import ChainProcessor, PassthroughProcessor, RobotVoiceProcessor
@@ -30,6 +32,9 @@ ASSETS = Path(__file__).parent / "assets"
 
 STATE_COLORS = {"Not configured": F.CAUTION, "Ready": F.SUCCESS, "Processing": F.ACCENT, "Error": F.CRITICAL}
 MONITOR_OFF = "(off)"
+TEST_SECONDS = 5
+TEST_HINT = ("Speak for 5 s, then hear it with the selected voice on your headphones or speakers. "
+             "Nothing is sent to Teams. · พูด 5 วินาที แล้วฟังกลับเป็นเสียงที่เลือก (ไม่ส่งเข้า Teams)")
 TILE_COLUMNS = 5
 PAGES = (("voice", F.I_MIC, "Voice · เสียง"), ("sample", F.I_AUDIO, "Voice from sample · จากตัวอย่าง"),
          ("devices", F.I_SPEAKERS, "Audio devices · อุปกรณ์"),
@@ -73,6 +78,10 @@ class App:
         self._fatal_msg: str | None = None
         self._unread = 0
         self._stats_text = ""
+        self._test_rec: ClipRecorder | None = None     # "Test my voice": recording in progress
+        self._test_take = None                          # last raw take (mic audio, memory only)
+        self._test_player: ClipPlayer | None = None
+        self._test_busy = False                         # rendering in a worker thread
         self.ai_available = all(importlib.util.find_spec(m) for m in ("torch", "onnxruntime"))
         try:
             import psutil
@@ -197,6 +206,16 @@ class App:
         self.out_meter.pack(fill="x", pady=2)
         self.stats_lbl = F.label(hero, "", fn.caption, F.TEXT2, anchor="w", justify="left")
         self.stats_lbl.grid(row=3, column=0, sticky="w", padx=20, pady=(6, 14))
+
+        # ---- test my voice: record a few seconds, hear them back with the selected voice (local only)
+        self.test_row = F.SettingRow(page, fn, F.I_HEADPHONES, "Test my voice · ทดสอบเสียง", TEST_HINT)
+        self.test_row.pack(fill="x", padx=(0, 24), pady=(8, 0))
+        self.replay_btn = F.button(self.test_row.right, "▶  Play again", self.replay_voice_test, fn, width=130)
+        self.replay_btn.pack(side="right", padx=(8, 0))
+        F.set_enabled(self.replay_btn, False)
+        self.test_btn = F.button(self.test_row.right, f"●  Speak {TEST_SECONDS} s", self.toggle_voice_test, fn,
+                                 width=140)
+        self.test_btn.pack(side="right")
 
         # ---- voice tiles
         self.mode = tk.StringVar(value=self.cfg.mode if self.cfg.mode != "rvc" or self.ai_available else "robot")
@@ -334,7 +353,10 @@ class App:
         _, self.mon_cb = row(F.I_HEADPHONES, "Monitor (headphones)",
                              "Optional: hear your converted voice. Use headphones, not speakers.", self.mon_var)
 
-        r = F.SettingRow(page, fn, F.I_VOLUME, "Test the route", "Plays a short beep. Stop processing first.")
+        r = F.SettingRow(page, fn, F.I_VOLUME, "Test the route",
+                         "Plays a short beep. Stop processing first. 'Output' goes into VB-CABLE for Teams, so you "
+                         "will not hear it; 'monitor' plays on your headphones. To hear your voice, use "
+                         "'Test my voice' on the Voice page.")
         r.pack(fill="x", padx=(0, 28), pady=(14, 2))
         F.button(r.right, "Test beep → monitor", lambda: self.test_tone("mon"), fn, width=170).pack(side="right")
         F.button(r.right, "Test beep → output", lambda: self.test_tone("out"), fn, width=170).pack(side="right", padx=(0, 8))
@@ -630,7 +652,8 @@ class App:
     def test_tone(self, which):
         name = self.out_var.get() if which == "out" else self.mon_var.get()
         if not name or name == MONITOR_OFF:
-            self.log("Choose a device first.", logging.WARNING)
+            self.log("Choose the 'Output → Teams' device first." if which == "out" else
+                     "Monitor is off: choose your headphones under 'Monitor (headphones)' first.", logging.WARNING)
             return
         if self.engine and self.engine.stats.running:
             self.log("Stop processing before the beep test.", logging.WARNING)
@@ -644,7 +667,8 @@ class App:
             try:
                 play_test_tone(d.index, self.cfg.host_api, self.cfg.samplerate)
                 self.root.after(0, self.log, f"Beep played on '{name}'."
-                                + (" Teams 'Test call' / Windows input meter of 'CABLE Output' should move."
+                                + (" It goes into VB-CABLE, so you do not hear it: Teams 'Test call' / the "
+                                   "Windows input meter of 'CABLE Output' should move."
                                    if d.is_cable_playback else ""))
             except Exception as e:
                 self.root.after(0, self.log, f"Beep failed on '{name}': {e}{_hint(str(e))}", logging.ERROR)
@@ -671,6 +695,10 @@ class App:
         if self.sample_page.recording:
             self.log("Finish the sample recording on 'Voice from sample' first.", logging.WARNING)
             return
+        if self.voice_test_recording:
+            self.log("Finish 'Test my voice' first (it is using the microphone).", logging.WARNING)
+            return
+        self.stop_voice_test_playback()
         c = self._collect_cfg()
         errors, warnings = dv.validate_routing(c.input_device, c.output_device, c.monitor_device,
                                                self.devices, c.host_api)
@@ -758,6 +786,146 @@ class App:
         else:
             self.log(f"Recording saved: {rec.path} ({secs:.1f} s{extra})")
 
+    # ---- test my voice: record from the mic, play back with the selected voice (memory only, never to the cable)
+    @property
+    def voice_test_recording(self) -> bool:
+        return self._test_rec is not None
+
+    def _test_status(self, text, level=None):
+        self.test_row.set_text(desc=text)
+        if level is not None:
+            self.log(text, level)
+
+    def preview_output(self):
+        """(index or None for the host API default, name) to play previews on, never the virtual cable."""
+        import sounddevice as sd
+
+        mon = self.mon_var.get()
+        if mon and mon != MONITOR_OFF:
+            d = dv.find_device(self.devices, mon, self.cfg.host_api, "output")
+            if d is not None:
+                return d.index, d.name
+        for api in sd.query_hostapis():
+            if api["name"] == self.cfg.host_api and api.get("default_output_device", -1) >= 0:
+                idx = api["default_output_device"]
+                name = sd.query_devices(idx)["name"]
+                if any(h in name.lower() for h in dv.VIRTUAL_HINTS):
+                    raise RuntimeError(f"the Windows default output is '{name}' (virtual cable); "
+                                       "choose your headphones as Monitor on 'Audio devices'")
+                return idx, name
+        raise RuntimeError("no output device found; choose a Monitor device on 'Audio devices'")
+
+    def toggle_voice_test(self):
+        if self._test_rec is not None:
+            self._finish_voice_test()
+            return
+        if self._test_busy:
+            return
+        self.stop_voice_test_playback()
+        if self.engine and self.engine.stats.running:
+            self._test_status("Press Stop first: the microphone is in use. While running, choose your headphones "
+                              "as Monitor to hear yourself live.", logging.WARNING)
+            return
+        if self.sample_page.recording:
+            self._test_status("Finish the sample recording on 'Voice from sample' first.", logging.WARNING)
+            return
+        mic = dv.find_device(self.devices, self.in_var.get(), self.cfg.host_api, "input")
+        if mic is None:
+            self._test_status("Choose your microphone on 'Audio devices' first.", logging.WARNING)
+            return
+        try:
+            self.preview_output()   # fail now, not after the user has spoken
+            self._test_rec = ClipRecorder(mic.index, self.cfg.host_api, self.cfg.samplerate, TEST_SECONDS)
+        except Exception as e:
+            self._test_status(f"Test failed: {e}{_hint(str(e))}", logging.WARNING)
+            return
+        F.set_enabled(self.replay_btn, False)
+        self._test_status(f"Speak now... ({mic.name})")
+        self._poll_voice_test()
+
+    def _poll_voice_test(self):
+        rec = self._test_rec
+        if rec is None:
+            return
+        if rec.full:
+            self._finish_voice_test()
+            return
+        left = max(0, TEST_SECONDS - int(rec.seconds))
+        self.test_btn.configure(text=f"■  Stop ({left} s)")
+        self.root.after(200, self._poll_voice_test)
+
+    def _finish_voice_test(self):
+        rec, self._test_rec = self._test_rec, None
+        self.test_btn.configure(text=f"●  Speak {TEST_SECONDS} s")
+        try:
+            x = rec.stop()
+        except Exception as e:
+            self._test_status(f"Recording failed: {e}", logging.WARNING)
+            return
+        if x.size < 0.5 * self.cfg.samplerate:
+            self._test_status("Too short – speak for at least half a second.")
+            return
+        if float(np.max(np.abs(x))) < 1e-3:
+            self._test_status("Nothing was heard from the microphone. Check the microphone on 'Audio devices' "
+                              "and Windows Privacy > Microphone access.", logging.WARNING)
+            return
+        self._test_take = x
+        self.replay_voice_test()
+
+    def replay_voice_test(self):
+        """Render the last take with the voice and settings selected now, then play it (in a worker thread)."""
+        if self._test_take is None or self._test_busy or self._test_rec is not None:
+            return
+        self.stop_voice_test_playback()
+        c = self._collect_cfg()
+        try:
+            proc = self._make_processor(c)
+            proc.reset()
+            idx, name = self.preview_output()
+        except Exception as e:
+            self._test_status(f"Test failed: {e}", logging.WARNING)
+            return
+        take, sr, api = self._test_take, c.samplerate, c.host_api
+        block = int(round(c.dsp_block_time * sr))
+        self._test_busy = True
+        F.set_enabled(self.test_btn, False)
+        F.set_enabled(self.replay_btn, False)
+        self._test_status(f"Preparing '{proc.name}'...")
+
+        def run():   # rendering only; the stream is opened on the UI thread (WASAPI needs COM there)
+            try:
+                y, err = render(proc, take, sr, block, c.input_gate_db, c.output_gain_db), None
+            except Exception as e:
+                y, err = None, e
+            self.root.after(0, self._voice_test_play, y, err, proc.name, idx, name)
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _voice_test_play(self, y, err, voice, idx, device):
+        self._test_busy = False
+        F.set_enabled(self.test_btn, True)
+        F.set_enabled(self.replay_btn, True)
+        if err is None and (self._test_rec is not None or (self.engine and self.engine.stats.running)):
+            return                   # the user started something else meanwhile
+        try:
+            if err is not None:
+                raise err
+            self._test_player = ClipPlayer(idx, self.cfg.host_api, y, self.cfg.samplerate)
+        except Exception as e:
+            self._test_status(f"Playback failed: {e}{_hint(str(e))}", logging.WARNING)
+            return
+        self._test_status(f"Playing {y.size / self.cfg.samplerate:.1f} s as '{voice}' on '{device}' – this is how "
+                          "Teams will hear you. Pick another voice and press ▶ Play again to compare.")
+        self.log(f"Test my voice: played as '{voice}' on '{device}'.")
+
+    def stop_voice_test_playback(self):
+        if self._test_player is not None:
+            try:
+                self._test_player.stop()
+            except Exception:
+                pass
+            self._test_player = None
+
     def _on_fatal(self, msg):  # called from engine threads
         self._fatal_msg = msg
 
@@ -831,6 +999,10 @@ class App:
     def on_close(self):
         try:
             self.sample_page.close()
+            self.stop_voice_test_playback()
+            if self._test_rec is not None:
+                self._test_rec.stop()
+                self._test_rec = None
             if self.engine:
                 self.engine.stop()
             self._collect_cfg().save(paths.CONFIG_FILE)

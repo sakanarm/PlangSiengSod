@@ -17,6 +17,7 @@ Runs on a normal Windows 10/11 laptop (Intel CPU/graphics). No NVIDIA GPU, no CU
 | Pass-through (routing test) | ✅ |
 | VB-CABLE detection, feedback-loop protection, test beep | ✅ |
 | Level meters, measured latency / drops / underruns / delay fixes / errors, CPU & RAM | ✅ |
+| "Test my voice": record 5 s, hear it back with the selected voice (headphones/speakers, never the cable), replay with another voice | ✅ unit tests + real-device UI check |
 | Long calls: extra delay after a hiccup (or from mic/cable clock drift) is trimmed automatically | ✅ simulated-clock tests + real-device soak with injected stalls |
 | Double-click launcher (`Parroty.exe` / `Parroty.cmd`) + Desktop/Start menu shortcuts | ✅ |
 | Device-disconnect detection, error state, logs (`logs\rtvc.log`) | ✅ |
@@ -79,9 +80,12 @@ Parroty icon (`scripts\build_launcher.ps1` → `Parroty.exe`) and add Desktop/St
 (`scripts\make_shortcuts.ps1`, current user, no admin rights). Both run `.venv\Scripts\pythonw.exe -m rtvc`
 from the project folder without a console window; `run.ps1` still works and shows errors in the console.
 
-**Hear what others will hear:** set *Monitor (headphones)* to your headphones and press Start (use
-headphones, not speakers, or you get echo), or press **● Record** and play the WAV back, or use Teams
-*Settings → Devices → Make a test call* with microphone = CABLE Output.
+**Hear what others will hear:** on the Voice page, *Test my voice* → **● Speak 5 s** records 5 s from your
+microphone and plays it back with the selected voice on the Monitor device (or the Windows default output,
+never VB-CABLE); **▶ Play again** replays the same take with whatever voice/settings are selected now. The take
+stays in memory only and the button works only while stopped. For a live check, set *Monitor (headphones)* to
+your headphones and press Start (use headphones, not speakers, or you get echo), or press **● Record** and play
+the WAV back, or use Teams *Settings → Devices → Make a test call* with microphone = CABLE Output.
 
 **Long calls:** if the PC stalls for a moment (updates, heavy apps), the extra audio it leaves queued is
 removed automatically within a few seconds, cut in your speech pauses (or at most 10 ms per block after 8 s
