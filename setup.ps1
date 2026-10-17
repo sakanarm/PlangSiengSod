@@ -9,6 +9,7 @@
   -WithRMVPE  : with -WithAI, also download the RMVPE pitch model (345 MB, optional).
   -Dev        : install pytest for running the unit tests.
   -Recreate   : delete and rebuild .venv (never done without this switch).
+  -NoShortcut : do not build Parroty.exe or create the Start menu / Desktop shortcuts.
 
   This script never installs drivers. VB-CABLE must be installed by you (see docs\INSTALL_WINDOWS.md).
 
@@ -20,7 +21,8 @@ param(
     [switch]$WithAI,
     [switch]$WithRMVPE,
     [switch]$Dev,
-    [switch]$Recreate
+    [switch]$Recreate,
+    [switch]$NoShortcut
 )
 $ErrorActionPreference = "Stop"
 Set-Location -LiteralPath $PSScriptRoot
@@ -84,5 +86,11 @@ if ($LASTEXITCODE -eq 3) {
     Write-Host "Could not query audio devices (see error above)." -ForegroundColor Yellow
 }
 
+if (-not $NoShortcut) {
+    Step "Creating Parroty.exe and the Start menu / Desktop shortcuts (current user only)"
+    & (Join-Path $PSScriptRoot "scripts\make_shortcuts.ps1")
+}
+
 Step "Done"
-Write-Host "Start the app with:  powershell -ExecutionPolicy Bypass -File .\run.ps1"
+Write-Host "Start Parroty: double-click the Parroty shortcut (Desktop / Start menu), or Parroty.exe / Parroty.cmd in this folder."
+Write-Host "Or, as before:  powershell -ExecutionPolicy Bypass -File .\run.ps1"

@@ -1,11 +1,13 @@
 # Parroty (real-time voice changer) for Windows - CORE (lite) environment, pinned.
-# Python 3.12 x64. Installed by setup.ps1 into .venv\  (~150 MB)
-# Enough for: audio routing, VB-CABLE/Teams, robot voice (DSP), hardware diagnostics.
+# Python 3.12 x64. Installed by setup.ps1 into .venv\  (~330 MB, of which ~68 MB is PyAV/FFmpeg)
+# Enough for: audio routing, VB-CABLE/Teams, all DSP voices, voice from sample, hardware diagnostics.
 numpy==1.26.4
 scipy==1.14.1
 soundfile==0.13.1
 sounddevice==0.5.2
 psutil==7.0.0
+# Voice from sample: reads WebM / M4A / Opus files. PyAV (BSD-3) bundles FFmpeg libraries (LGPL).
+av==18.1.0
 # UI (Windows 11 style widgets): customtkinter (CC0) + its deps darkdetect (BSD-3), packaging
 customtkinter==5.2.2
 darkdetect==0.8.0

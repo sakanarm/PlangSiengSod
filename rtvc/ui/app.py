@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import logging
 import os
+import sys
 import threading
 import tkinter as tk
 import warnings
@@ -15,11 +16,13 @@ from tkinter import filedialog, messagebox
 import customtkinter as ctk
 
 from .. import __version__, paths
+from ..audio import custom_voices as cvs
 from ..audio import devices as dv
 from ..audio.engine import AudioEngine, play_test_tone
 from ..audio.processors import ChainProcessor, PassthroughProcessor, RobotVoiceProcessor
-from ..audio.voices import VOICES, key_for_label, make_voice
+from ..audio.voices import DEFAULT_VOICE, VOICES, get_voice, make_voice, voice_exists
 from ..config import THEMES, AppConfig
+from .sample_page import SamplePage
 from . import fluent as F
 
 logger = logging.getLogger(__name__)
@@ -27,7 +30,9 @@ ASSETS = Path(__file__).parent / "assets"
 
 STATE_COLORS = {"Not configured": F.CAUTION, "Ready": F.SUCCESS, "Processing": F.ACCENT, "Error": F.CRITICAL}
 MONITOR_OFF = "(off)"
-PAGES = (("voice", F.I_MIC, "Voice · เสียง"), ("devices", F.I_SPEAKERS, "Audio devices · อุปกรณ์"),
+TILE_COLUMNS = 5
+PAGES = (("voice", F.I_MIC, "Voice · เสียง"), ("sample", F.I_AUDIO, "Voice from sample · จากตัวอย่าง"),
+         ("devices", F.I_SPEAKERS, "Audio devices · อุปกรณ์"),
          ("messages", F.I_MESSAGE, "Messages · ข้อความ"), ("hardware", F.I_PULSE, "Hardware"))
 
 TROUBLESHOOTING = {
@@ -47,9 +52,12 @@ def _hint(msg: str) -> str:
 
 
 def _split_label(label: str) -> tuple[str, str]:
-    """'ชิปมังก์ / การ์ตูน (Chipmunk)' -> ('ชิปมังก์', 'Chipmunk')"""
-    th, _, en = label.partition(" (")
-    return th.split(" / ")[0], en.rstrip(")")
+    """'ชิปมังก์ / การ์ตูน (Chipmunk)' -> ('ชิปมังก์', 'Chipmunk');
+    'แหบ (เสียงตัวเอง) (Hoarse, own voice)' -> ('แหบ (เสียงตัวเอง)', 'Hoarse, own voice')"""
+    th, _, en = label.rpartition(" (")
+    if not th:                                   # no English part
+        return label.split(" / ")[0], ""
+    return th.split(" / ")[0], en.removesuffix(")")
 
 
 class App:
@@ -115,7 +123,8 @@ class App:
             F.label(brand, F.I_MIC, fn.icon(16), F.ON_ACCENT, fg_color=F.ACCENT, corner_radius=6,
                     width=30, height=30).pack(side="left")
         F.label(brand, "Parroty", fn.body_strong).pack(side="left", padx=(10, 6))
-        F.label(brand, "v" + ".".join(__version__.split(".")[:2]), fn.caption, F.TEXT2).pack(side="left", pady=(2, 0))
+        F.label(brand, "v" + ".".join(__version__.split(".")[:2]) + " by Sakan Punyanon", fn.caption,
+                F.TEXT2).pack(side="left", pady=(2, 0))
         self.nav = {}
         for key, icon, text in PAGES:
             item = F.NavItem(nav, fn, icon, text, lambda k=key: self.show_page(k))
@@ -132,13 +141,15 @@ class App:
         content.rowconfigure(0, weight=1)
         content.columnconfigure(0, weight=1)
         self.pages = {}
-        self.pages["voice"] = ctk.CTkScrollableFrame(
-            content, fg_color="transparent", scrollbar_button_color=F.TRACK, scrollbar_button_hover_color=F.TEXT2)
+        for key in ("voice", "sample"):
+            self.pages[key] = ctk.CTkScrollableFrame(
+                content, fg_color="transparent", scrollbar_button_color=F.TRACK, scrollbar_button_hover_color=F.TEXT2)
         for key in ("devices", "messages", "hardware"):
             self.pages[key] = ctk.CTkFrame(content, fg_color="transparent")
         for p in self.pages.values():
             p.grid(row=0, column=0, sticky="nsew")
         self._build_voice(self.pages["voice"])
+        self.sample_page = SamplePage(self, self.pages["sample"])
         self._build_devices(self.pages["devices"])
         self._build_messages(self.pages["messages"])
         self._build_hardware(self.pages["hardware"])
@@ -189,8 +200,7 @@ class App:
 
         # ---- voice tiles
         self.mode = tk.StringVar(value=self.cfg.mode if self.cfg.mode != "rvc" or self.ai_available else "robot")
-        voice = VOICES.get(self.cfg.voice) or next(iter(VOICES.values()))
-        self.voice_var = tk.StringVar(value=voice.label)
+        self.voice_key = self.cfg.voice if voice_exists(self.cfg.voice) else DEFAULT_VOICE
         self._section(page, "Choose a voice · เลือกเสียง",
                       "Sound effects (DSP) – no AI model, runs on the CPU. You can switch while running.")
         people = [k for k, v in VOICES.items() if v.group == "person"] + ["passthrough"]
@@ -200,13 +210,12 @@ class App:
             F.label(page, title, fn.caption, F.TEXT2, anchor="w").pack(fill="x", padx=4, pady=(10, 4))
             grid = ctk.CTkFrame(page, fg_color="transparent")
             grid.pack(fill="x", padx=(0, 24))
-            for i, key in enumerate(keys):
-                grid.columnconfigure(i, weight=1, uniform="tile")
-                th, en = self._tile_text(key)
-                icon, sym = F.VOICE_ICONS.get(key, (F.I_MIC, False))
-                t = F.Tile(grid, fn, icon, sym, th, en, lambda k=key: self.select_voice(k))
-                t.grid(row=0, column=i, sticky="nsew", padx=(0 if i == 0 else 3, 3 if i < len(keys) - 1 else 0))
-                self.tiles[key] = t
+            self._tile_grid(grid, keys)
+        F.label(page, "My voices · เสียงของฉัน (from a sample)", fn.caption, F.TEXT2,
+                anchor="w").pack(fill="x", padx=4, pady=(10, 4))
+        self.custom_box = ctk.CTkFrame(page, fg_color="transparent")
+        self.custom_box.pack(fill="x", padx=(0, 24))
+        self.rebuild_custom_tiles()
         if not self.ai_available:
             F.label(page, "AI voice (RVC model): add-on not installed – not available in this version.",
                     fn.caption, F.TEXT_DISABLED, anchor="w").pack(fill="x", padx=4, pady=(8, 0))
@@ -217,7 +226,8 @@ class App:
         self.adjust.pack(fill="x", padx=(0, 24), pady=(6, 0))
         self.sel_row = F.SettingRow(self.adjust, fn, F.I_MIC, "", "")
         self.reset_btn = F.button(self.sel_row.right, "Reset to preset", self._reset_voice, fn, width=140)
-        self.reset_btn.pack()
+        self.reset_btn.pack(side="right")
+        self.delete_btn = F.button(self.sel_row.right, "Delete voice", self.delete_custom_voice, fn, width=120)
 
         def row(icon, title, desc, lo, hi, value, digits, steps, unit=""):
             r = F.SettingRow(self.adjust, fn, icon, title, desc)
@@ -237,6 +247,9 @@ class App:
                                          "Size of the speaker you hear: − = bigger / deeper, + = smaller. Pitch stays.",
                                          -8, 8, self.cfg.voice_formant_st, 1, 32, " st")
         self.voice_rows, self.voice_sliders = (r4, r5), (s4, s5)
+        self.eq_row, self.voice_eq, _ = row(F.I_VOLUME, "Tone match (EQ amount)",
+                                            "How much of the measured tone (EQ) is applied: 0 = off, 1 = full.",
+                                            0, 1, self.cfg.voice_eq_amount, 2, 20)
 
         self._section(page, "Output · เสียงออก")
         out = ctk.CTkFrame(page, fg_color="transparent")
@@ -257,12 +270,48 @@ class App:
                 justify="left", wraplength=640).pack(side="left", pady=12)
         self._mode_changed()
 
+    def _tile_grid(self, grid, keys):
+        """Voice tiles, TILE_COLUMNS per row (rows wrap so the window can stay narrow)."""
+        for c in range(TILE_COLUMNS):
+            grid.columnconfigure(c, weight=1, uniform="tile")
+        for i, key in enumerate(keys):
+            row, col = divmod(i, TILE_COLUMNS)
+            th, en = self._tile_text(key)
+            icon, sym = self._icon(key)
+            t = F.Tile(grid, self.fonts, icon, sym, th, en, lambda k=key: self.select_voice(k))
+            t.grid(row=row, column=col, sticky="nsew", pady=(0 if row == 0 else 6, 0),
+                   padx=(0 if col == 0 else 3, 3 if col < TILE_COLUMNS - 1 else 0))
+            self.tiles[key] = t
+
+    def rebuild_custom_tiles(self):
+        """(Re)create the 'My voices' tiles from the saved custom voices."""
+        for w in self.custom_box.winfo_children():
+            w.destroy()
+        for k in [k for k in self.tiles if cvs.is_custom_key(k)]:
+            del self.tiles[k]
+        keys = [cv.key for cv in cvs.list_voices()]
+        if keys:
+            grid = ctk.CTkFrame(self.custom_box, fg_color="transparent")
+            grid.pack(fill="x")
+            self._tile_grid(grid, keys)
+        else:
+            empty = ctk.CTkFrame(self.custom_box, fg_color="transparent")
+            empty.pack(fill="x")
+            F.label(empty, "None yet. Make one from a voice sample:", self.fonts.caption, F.TEXT2).pack(side="left", padx=4)
+            F.link(empty, "Voice from sample ›", lambda: self.show_page("sample"), self.fonts).pack(side="left")
+        sel = self._selected_key()
+        for k, t in self.tiles.items():
+            t.set_selected(k == sel)
+
+    def _icon(self, key):
+        return F.CUSTOM_ICON if cvs.is_custom_key(key) else F.VOICE_ICONS.get(key, (F.I_MIC, False))
+
     def _tile_text(self, key):
         if key == "robot":
             return "หุ่นยนต์", "Robot"
         if key == "passthrough":
             return "เสียงจริง", "Pass-through"
-        return _split_label(VOICES[key].label)
+        return _split_label(get_voice(key).label)
 
     def _build_devices(self, page):
         fn = self.fonts
@@ -390,56 +439,96 @@ class App:
 
     def _selected_key(self) -> str:
         m = self.mode.get()
-        return key_for_label(self.voice_var.get()) if m == "voice" else m
+        return self.voice_key if m == "voice" else m
 
     def select_voice(self, key: str):
-        """Tile click. A voice starts from its own default pitch/formant."""
+        """Tile click. A voice starts from its own default pitch/formant (and tone match)."""
         if key in ("robot", "passthrough"):
             self.mode.set(key)
         else:
-            v = VOICES[key]
+            try:
+                v = get_voice(key)
+            except ValueError as e:
+                self.log(f"Cannot select voice: {e}", logging.WARNING)
+                return
             self.mode.set("voice")
-            self.voice_var.set(v.label)
+            self.voice_key = key
             self.voice_pitch.set(v.pitch_st)
             self.voice_formant.set(v.formant_st)
+            self.voice_eq.set(v.eq_amount)
         self._mode_changed()
 
     def _reset_voice(self):
-        v = VOICES[key_for_label(self.voice_var.get())]
+        v = get_voice(self.voice_key)
         self.voice_pitch.set(v.pitch_st)
         self.voice_formant.set(v.formant_st)
+        self.voice_eq.set(v.eq_amount)
 
     def _mode_changed(self):
         key = self._selected_key()
+        if key not in ("robot", "passthrough") and not voice_exists(key):
+            self.voice_key = key = DEFAULT_VOICE              # e.g. a custom voice file was removed
         for k, t in self.tiles.items():
             t.set_selected(k == key)
-        icon, sym = F.VOICE_ICONS.get(key, (F.I_MIC, False))
+        icon, sym = self._icon(key)
         th, en = self._tile_text(key)
         rows = [self.sel_row]
+        custom = cvs.is_custom_key(key)
         if key == "robot":
             desc = "Classic robot effect with a fixed pitch and an optional metallic wobble."
             rows += self.robot_rows
         elif key == "passthrough":
             desc = "No change: your real voice is sent. Use it to test the route to Teams."
         else:
-            v = VOICES[key]
-            th, en = _split_label(v.label)
+            v = get_voice(key)
             th = v.label.partition(" (")[0]
             desc = v.description + ("" if v.adjustable else "  No pitch / formant controls for this voice.")
             rows += self.voice_rows
+            if v.eq:
+                rows.append(self.eq_row)
             for s in self.voice_sliders:
                 F.set_enabled(s, v.adjustable)
             F.set_enabled(self.reset_btn, v.adjustable)
         self.sel_row.set_text(f"{th} · {en}", desc, icon, self.fonts, sym)
-        if key in VOICES:
-            self.reset_btn.pack()
-        else:
+        if key in ("robot", "passthrough"):
             self.reset_btn.pack_forget()
-        for r in (self.sel_row, *self.robot_rows, *self.voice_rows):
+        else:
+            self.reset_btn.pack(side="right")
+        if custom:
+            self.delete_btn.pack(side="right", padx=(0, 8))
+        else:
+            self.delete_btn.pack_forget()
+        for r in (self.sel_row, *self.robot_rows, *self.voice_rows, self.eq_row):
             r.pack_forget()
         for r in rows:
             r.pack(fill="x", pady=2)
         self._swap_processor()
+
+    def add_custom_voice(self, cv: cvs.CustomVoice):
+        """Called by the sample page after saving: show the new tile and select it."""
+        self.rebuild_custom_tiles()
+        self.select_voice(cv.key)
+        self.show_page("voice")
+        self.log(f"New voice '{cv.name}' saved (pitch {cv.pitch_st:+.1f} st, formant {cv.formant_st:+.1f} st, "
+                 f"EQ {len(cv.eq)} bands) in {paths.CUSTOM_VOICES_DIR}")
+
+    def delete_custom_voice(self):
+        key = self.voice_key
+        if not cvs.is_custom_key(key):
+            return
+        name = get_voice(key).label.partition(" (")[0]
+        if not messagebox.askyesno("Delete voice", f"Delete the voice '{name}'?\nThis cannot be undone.",
+                                   parent=self.root):
+            return
+        try:
+            cvs.delete(key[len(cvs.PREFIX):])
+        except OSError as e:
+            self.log(f"Could not delete '{name}': {e}", logging.ERROR)
+            return
+        self.log(f"Voice '{name}' deleted.")
+        self.voice_key = DEFAULT_VOICE
+        self.rebuild_custom_tiles()
+        self.select_voice(DEFAULT_VOICE)
 
     def _swap_processor(self):
         """While running, switching mode or voice takes effect immediately (new DSP chain)."""
@@ -465,6 +554,8 @@ class App:
         elif isinstance(p, ChainProcessor) and p.shift is not None:
             p.shift.pitch_st = float(self.voice_pitch.get())
             p.shift.formant_st = float(self.voice_formant.get())
+            if p.eq is not None:
+                p.eq.amount = float(self.voice_eq.get())
 
     def _collect_cfg(self) -> AppConfig:
         c = self.cfg
@@ -474,9 +565,10 @@ class App:
         c.robot_pitch_hz = round(float(self.robot_pitch.get()), 1)
         c.ring_mod_hz = round(float(self.ring_hz.get()), 1)
         c.ring_mix = round(float(self.ring_mix.get()), 2)
-        c.voice = key_for_label(self.voice_var.get())
+        c.voice = self.voice_key
         c.voice_pitch_st = round(float(self.voice_pitch.get()), 1)
         c.voice_formant_st = round(float(self.voice_formant.get()), 1)
+        c.voice_eq_amount = round(float(self.voice_eq.get()), 2)
         c.output_gain_db = round(float(self.gain.get()), 1)
         c.input_gate_db = round(float(self.gate.get()), 1)
         return c
@@ -563,7 +655,8 @@ class App:
         if c.mode == "robot":
             return RobotVoiceProcessor(c.samplerate, c.robot_pitch_hz, c.ring_mod_hz, c.ring_mix)
         if c.mode == "voice":
-            return make_voice(c.voice, c.samplerate, c.voice_pitch_st, c.voice_formant_st)
+            return make_voice(c.voice, c.samplerate, c.voice_pitch_st, c.voice_formant_st,
+                              eq_amount=c.voice_eq_amount)
         if c.mode == "passthrough":
             return PassthroughProcessor()
         raise RuntimeError("AI voice mode is not available in this build.")
@@ -575,6 +668,9 @@ class App:
             self.start()
 
     def start(self):
+        if self.sample_page.recording:
+            self.log("Finish the sample recording on 'Voice from sample' first.", logging.WARNING)
+            return
         c = self._collect_cfg()
         errors, warnings = dv.validate_routing(c.input_device, c.output_device, c.monitor_device,
                                                self.devices, c.host_api)
@@ -615,7 +711,8 @@ class App:
             s = self.engine.stats
             self.engine.stop()
             self.log(f"Stopped. blocks={s.blocks_out} dropped={s.dropped_blocks} underruns={s.underruns} "
-                     f"errors={s.processing_errors} avg processing={s.proc_ms_avg:.1f} ms")
+                     f"delay fixes={s.catchups} ({s.catchup_ms:.0f} ms) errors={s.processing_errors} "
+                     f"avg processing={s.proc_ms_avg:.1f} ms")
         self.run_btn.configure(text="▶  Start")
         F.set_enabled(self.rec_btn, False)
         self._update_state()
@@ -719,7 +816,8 @@ class App:
             dev_txt = f" + device (in {dev['input']:.0f} / out {dev['output']:.0f} ms)" if dev else ""
             text = (f"Processing {s.proc_ms_avg:.1f} ms (max {s.proc_ms_max:.1f})   ·   RTF {s.rtf:.2f}   ·   "
                     f"Latency ~{s.est_latency_ms:.0f} ms{dev_txt}\n"
-                    f"Dropped {s.dropped_blocks}   ·   Underruns {s.underruns}   ·   Errors {s.processing_errors}"
+                    f"Dropped {s.dropped_blocks}   ·   Underruns {s.underruns}   ·   Delay fixes {s.catchups}"
+                    f"   ·   Errors {s.processing_errors}"
                     f"   ·   {sys_txt}")
         else:
             self.in_meter.set_db(-120)
@@ -732,6 +830,7 @@ class App:
 
     def on_close(self):
         try:
+            self.sample_page.close()
             if self.engine:
                 self.engine.stop()
             self._collect_cfg().save(paths.CONFIG_FILE)
@@ -744,6 +843,10 @@ def main():
     from logging.handlers import RotatingFileHandler
 
     paths.ensure_dirs()
+    if sys.stdout is None or sys.stderr is None:    # started without a console (pythonw / Parroty.exe)
+        devnull = open(os.devnull, "w", encoding="utf-8")
+        sys.stdout = sys.stdout or devnull
+        sys.stderr = sys.stderr or devnull
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s",
                         handlers=[RotatingFileHandler(paths.LOGS_DIR / "rtvc.log", maxBytes=2_000_000,
                                                       backupCount=3, encoding="utf-8"), logging.StreamHandler()])

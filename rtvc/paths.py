@@ -16,6 +16,7 @@ MODELS_DIR = DATA_ROOT / "models"          # user's trained RVC .pth / .index fi
 CACHE_DIR = DATA_ROOT / "cache"            # ONNX exports, test models
 LOGS_DIR = DATA_ROOT / "logs"
 RECORDINGS_DIR = DATA_ROOT / "recordings"  # default folder for the Record button (local only)
+CUSTOM_VOICES_DIR = DATA_ROOT / "custom_voices"   # "voice from sample" settings (JSON, no audio)
 CONFIG_FILE = DATA_ROOT / "config.json"
 
 HUBERT_DIR = ASSETS_DIR / "hubert_base"

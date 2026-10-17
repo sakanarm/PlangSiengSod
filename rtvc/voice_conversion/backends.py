@@ -26,7 +26,7 @@ from .. import paths
 
 logger = logging.getLogger(__name__)
 
-EXPORT_FORMAT_VERSION = 1  # bump when export wrappers change, invalidates the cache
+EXPORT_FORMAT_VERSION = 2  # bump when export wrappers change, invalidates the cache
 OPSET = 17
 
 
@@ -108,25 +108,35 @@ def _export(module, args, path: Path, input_names, output_names, dynamic_axes) -
     tmp.replace(path)
 
 
-def export_hubert_onnx(version: str, out: Path) -> Path:
+def export_hubert_onnx(version: str, out: Path, n16: int, hubert_model=None) -> Path:
+    """Export HuBERT for exactly ``n16`` input samples (static shape).
+
+    Static shapes are deliberate: DirectML runs fixed-shape graphs best, and a streaming
+    configuration always feeds the same window length.
+    """
     import torch
 
-    model = load_hubert_torch()
+    model = hubert_model if hubert_model is not None else load_hubert_torch()
     _strip_weight_norm(model)
     wrap = HubertFeatures.module(model, version)
-    dummy = torch.randn(1, 16000) * 0.1
-    _export(wrap, (dummy,), out, ["audio"], ["feats"], {"audio": {1: "n"}, "feats": {1: "t"}})
+    dummy = torch.randn(1, n16) * 0.1
+    _export(wrap, (dummy,), out, ["audio"], ["feats"], None)
     return out
 
 
-def export_synth_onnx(net_g, has_f0: bool, out_dir: Path) -> tuple[Path, Path]:
+def export_synth_onnx(net_g, has_f0: bool, out_dir: Path, t: int, lz: int) -> tuple[Path, Path]:
+    """Export encoder+flow for ``t`` frames and the decoder for ``lz`` frames (static shapes).
+
+    RVC's relative-position attention does not survive dynamic-shape tracing (the traced
+    graph fails with a Reshape error at any other length), so each streaming configuration
+    gets its own graphs; ``synth_onnx_dir`` keys the cache by those shapes.
+    """
     import torch
 
     from .synth import Decoder, EncoderFlow, speaker_embedding
 
     enc = EncoderFlow(net_g, has_f0).eval()
     dec = Decoder(net_g, has_f0).eval()
-    t = 200
     c = net_g.enc_p.emb_phone.in_features
     inter = net_g.inter_channels
     g = speaker_embedding(net_g)
@@ -137,23 +147,38 @@ def export_synth_onnx(net_g, has_f0: bool, out_dir: Path) -> tuple[Path, Path]:
     enc_path = out_dir / "encoder_flow.onnx"
     dec_path = out_dir / "decoder.onnx"
     _export(enc, (phone, lengths, pitch, noise, g), enc_path,
-            ["phone", "lengths", "pitch", "noise", "g"], ["z"],
-            {"phone": {1: "t"}, "pitch": {1: "t"}, "noise": {2: "t"}, "z": {2: "t"}})
-    upp = int(net_g.dec.upp) if hasattr(net_g.dec, "upp") else int(np.prod(net_g.upsample_rates))
-    lz = 40
+            ["phone", "lengths", "pitch", "noise", "g"], ["z"], None)
+    upp = synth_upp(net_g)
     z = torch.randn(1, inter, lz)
     f0 = torch.full((1, lz), 200.0)
     dnoise = torch.randn(1, lz * upp, 1)
-    _export(dec, (z, f0, g, dnoise), dec_path, ["z", "f0", "g", "noise"], ["audio"],
-            {"z": {2: "l"}, "f0": {1: "l"}, "noise": {1: "s"}, "audio": {2: "s"}})
+    _export(dec, (z, f0, g, dnoise), dec_path, ["z", "f0", "g", "noise"], ["audio"], None)
     return enc_path, dec_path
 
 
-def onnx_cache_dir(model_sha256: str) -> Path:
+def synth_upp(net_g) -> int:
+    """Output samples per 10 ms frame at the model's sample rate."""
+    return int(net_g.dec.upp) if hasattr(net_g.dec, "upp") else int(np.prod(net_g.upsample_rates))
+
+
+def _cache_tag() -> str:
     import torch
 
-    tag = f"{model_sha256[:16]}_f{EXPORT_FORMAT_VERSION}_t{torch.__version__.split('+')[0]}"
-    return paths.ONNX_CACHE_DIR / tag
+    return f"f{EXPORT_FORMAT_VERSION}_t{torch.__version__.split('+')[0]}"
+
+
+def onnx_cache_dir(model_sha256: str) -> Path:
+    return paths.ONNX_CACHE_DIR / f"{model_sha256[:16]}_{_cache_tag()}"
+
+
+def synth_onnx_dir(model_sha256: str, t: int, lz: int) -> Path:
+    return onnx_cache_dir(model_sha256) / f"T{t}_L{lz}"
+
+
+def hubert_onnx_path(version: str, n16: int) -> Path:
+    # HuBERT weights are fixed (SHA-256 pinned download), so the export only depends on
+    # the feature layer (v1/v2) and the window length.
+    return paths.ONNX_CACHE_DIR / "hubert" / f"{version}_n{n16}_{_cache_tag()}.onnx"
 
 
 # --------------------------------------------------------------------------- backends
@@ -229,7 +254,7 @@ class OnnxRuntimeBackend:
 class TorchCPUBackend:
     name = "torch-cpu"
 
-    def __init__(self, net_g, has_f0: bool, version: str, rmvpe_session=None):
+    def __init__(self, net_g, has_f0: bool, version: str, rmvpe_session=None, hubert_model=None):
         import torch
 
         from .synth import Decoder, EncoderFlow
@@ -238,7 +263,8 @@ class TorchCPUBackend:
         self.torch = torch
         self.enc = EncoderFlow(net_g, has_f0).eval()
         self.dec = Decoder(net_g, has_f0).eval()
-        self.hub = HubertFeatures.module(load_hubert_torch(), version)
+        self.hub = HubertFeatures.module(hubert_model if hubert_model is not None else load_hubert_torch(),
+                                         version)
         self.rmvpe_session = rmvpe_session
 
     def hubert(self, audio16k):
@@ -267,55 +293,60 @@ def _rel_err(a: np.ndarray, b: np.ndarray) -> float:
 
 
 def self_test(backend, reference: TorchCPUBackend | None, inter: int, gin_g: np.ndarray,
-              feat_dim: int, upp: int, tolerance: float = 2e-2) -> tuple[dict, dict]:
-    """Run real inference through ``backend``; compare with the CPU reference if given.
+              feat_dim: int, upp: int, n16: int, t: int, lz: int,
+              rmvpe_reference=None, tolerance: float = 2e-2) -> tuple[dict, dict]:
+    """Run real inference through ``backend`` at the streaming shapes (n16 / t / lz).
 
+    Compares every stage with the PyTorch CPU reference when one is given, and the RMVPE
+    pitch network with ``rmvpe_reference`` (a CPU ONNX session) when the backend has one.
     Returns (relative_errors, timings_ms). Raises RuntimeError if results disagree.
     """
     rng = np.random.default_rng(1234)
-    audio = (0.1 * np.sin(2 * np.pi * 180 * np.arange(16000) / 16000)
-             + 0.01 * rng.standard_normal(16000)).astype(np.float32)
-    t = 100
+    audio = (0.1 * np.sin(2 * np.pi * 180 * np.arange(n16) / 16000)
+             + 0.01 * rng.standard_normal(n16)).astype(np.float32)
     phone = rng.standard_normal((1, t, feat_dim)).astype(np.float32)
     lengths = np.array([t], dtype=np.int64)
     pitch = rng.integers(1, 255, (1, t)).astype(np.int64)
     noise = rng.standard_normal((1, inter, t)).astype(np.float32)
-    lz = 30
     f0 = np.full((1, lz), 180.0, dtype=np.float32)
     dnoise = rng.standard_normal((1, lz * upp, 1)).astype(np.float32)
 
     timings = {}
     outs = {}
-    for name, fn in (
-        ("hubert", lambda: backend.hubert(audio)),
-        ("encoder_flow", lambda: backend.encoder_flow(phone, lengths, pitch, noise, gin_g)),
-    ):
+
+    def timed(name, fn):
         fn()  # warm-up (DirectML compiles kernels on first run)
         t0 = time.perf_counter()
         outs[name] = fn()
         timings[name] = (time.perf_counter() - t0) * 1000
-    z = outs["encoder_flow"][:, :, :lz].astype(np.float32)
-    backend.decoder(z, f0, gin_g, dnoise)
-    t0 = time.perf_counter()
-    outs["decoder"] = backend.decoder(z, f0, gin_g, dnoise)
-    timings["decoder"] = (time.perf_counter() - t0) * 1000
+
+    timed("hubert", lambda: backend.hubert(audio))
+    timed("encoder_flow", lambda: backend.encoder_flow(phone, lengths, pitch, noise, gin_g))
+    z = np.ascontiguousarray(outs["encoder_flow"][:, :, -lz:], dtype=np.float32)
+    timed("decoder", lambda: backend.decoder(z, f0, gin_g, dnoise))
+    mel = None
+    if rmvpe_reference is not None and getattr(backend, "sessions", {}).get("rmvpe") is not None:
+        mel = (rng.standard_normal((1, 128, 64)) - 4).astype(np.float32)   # log-mel range
+        timed("rmvpe", lambda: backend.rmvpe(mel))
 
     for k, v in outs.items():
         if not np.all(np.isfinite(v)):
             raise RuntimeError(f"{backend.name}: {k} produced NaN/Inf")
 
     errors = {}
+    ref = {}
     if reference is not None and reference is not backend:
-        ref = {
-            "hubert": reference.hubert(audio),
-            "encoder_flow": reference.encoder_flow(phone, lengths, pitch, noise, gin_g),
-        }
+        ref["hubert"] = reference.hubert(audio)
+        ref["encoder_flow"] = reference.encoder_flow(phone, lengths, pitch, noise, gin_g)
         ref["decoder"] = reference.decoder(z, f0, gin_g, dnoise)
-        for k in ref:
-            errors[k] = _rel_err(outs[k], ref[k])
-        bad = {k: v for k, v in errors.items() if v > tolerance}
-        if bad:
-            raise RuntimeError(f"{backend.name} disagrees with the CPU reference: {bad}")
+    if mel is not None:
+        name = rmvpe_reference.get_inputs()[0].name
+        ref["rmvpe"] = rmvpe_reference.run(None, {name: mel})[0][0]
+    for k in ref:
+        errors[k] = _rel_err(outs[k], ref[k])
+    bad = {k: v for k, v in errors.items() if v > tolerance}
+    if bad:
+        raise RuntimeError(f"{backend.name} disagrees with the CPU reference: {bad}")
     return errors, timings
 
 

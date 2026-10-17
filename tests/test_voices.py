@@ -144,9 +144,42 @@ def test_preset_pitch(key):
     v = VOICES[key]
     x = _harmonic(120.0)
     y = _run(make_voice(key, SR), x, 2400)
-    if key == "alien":                                          # vibrato: pitch moves around the target
+    if v.vibrato_st:                                            # vibrato: pitch moves around the target
         return
     assert _f0(y) == pytest.approx(120.0 * 2 ** (v.pitch_st / 12), rel=0.02)
+
+
+def test_elderly_tremor_moves_pitch_around_preset():
+    v = VOICES["elderly"]
+    y = _run(make_voice("elderly", SR), _harmonic(120.0, seconds=3.0), 2400)
+    want = 120.0 * 2 ** (v.pitch_st / 12)
+    # f0 in 40 ms windows across one second: it must wobble, and stay within the vibrato depth
+    f0s = []
+    for start in range(SR, 2 * SR, SR // 25):
+        seg = y[start:start + 1920].astype(np.float64)
+        ac = np.correlate(seg, seg, "full")[seg.size - 1:]
+        lo, hi = int(SR / 400), int(SR / 60)
+        f0s.append(SR / (lo + int(np.argmax(ac[lo:hi]))))
+    st = 12 * np.log2(np.array(f0s) / want)
+    assert np.ptp(st) > 0.3 and np.max(np.abs(st)) < v.vibrato_st + 0.5, st
+
+
+@pytest.mark.parametrize("key,direction", [("tiny", 1), ("gentle_giant", -1)])
+def test_size_voices_keep_pitch_and_move_formants(key, direction):
+    x = _harmonic(130.0, formant=900.0)
+    y = _run(make_voice(key, SR), x, 2400)
+    assert _f0(y) == pytest.approx(130.0, rel=0.01)
+    assert direction * (_formant_hz(y, 130.0) - _formant_hz(x, 130.0)) > 150
+
+
+def test_masked_is_low_and_band_limited():
+    x = _harmonic(150.0)
+    y = _run(make_voice("masked", SR), x, 2400)
+    assert _f0(y) == pytest.approx(150.0 * 2 ** (VOICES["masked"].pitch_st / 12), rel=0.03)
+    seg = y[SR // 2:].astype(np.float64)
+    S = np.abs(np.fft.rfft(seg)) ** 2
+    f = np.fft.rfftfreq(seg.size, 1 / SR)
+    assert S[f > 6000].sum() / S.sum() < 1e-3
 
 
 def _formant_hz(x, f0):

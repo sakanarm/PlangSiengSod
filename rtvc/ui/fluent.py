@@ -41,6 +41,9 @@ I_MIC, I_SPEAKERS, I_MESSAGE, I_PULSE, I_HELP = "", "", "", "", "
 I_THEME, I_INFO, I_ROBOT, I_EMOJI, I_MUSIC = "", "", "", "", ""
 I_RADIO, I_VOLUME, I_HEADPHONES, I_SETTINGS = "", "", "", ""
 
+I_AUDIO, I_FILE, I_DELETE = "", "", ""
+CUSTOM_ICON = ("★", True)                    # tiles of voices made from a sample
+
 # voice key -> (icon, uses the symbol font instead of the icon font)
 VOICE_ICONS = {
     "robot": (I_ROBOT, False), "passthrough": (I_MIC, False),
@@ -48,6 +51,9 @@ VOICE_ICONS = {
     "female": ("♀", True), "soft_female": ("♀", True), "child": (I_EMOJI, False),
     "chipmunk": (I_MUSIC, False), "monster": ("☠", True), "radio": (I_RADIO, False),
     "whisper": ("☁", True), "cave": ("⛰", True), "alien": ("👽", True),
+    "elderly": ("👴", True), "tiny": ("🐭", True), "gentle_giant": ("🐻", True), "masked": ("🎭", True),
+    "retro": ("👾", True), "jet": ("✈", True), "underwater": ("🐠", True), "ghost": ("👻", True),
+    "stadium": ("📣", True), "cold": ("🤧", True), "sore_throat": ("😷", True), "hoarse": ("🗣", True), "hoarse_own": ("🗣", True),
 }
 
 
@@ -142,6 +148,19 @@ def option_menu(parent, variable, command, fonts: Fonts, width=340):
                            dropdown_fg_color=CARD, dropdown_hover_color=NAV_HOVER, dropdown_text_color=TEXT)
     om.pack(padx=1, pady=1)
     return box, om
+
+
+def checkbox(parent, text, variable, command, fonts: Fonts):
+    return ctk.CTkCheckBox(parent, text=text, variable=variable, command=command, font=fonts.body,
+                           corner_radius=4, border_width=1, checkbox_width=20, checkbox_height=20,
+                           fg_color=ACCENT, hover_color=ACCENT_HOVER, border_color=CONTROL_BORDER,
+                           checkmark_color=ON_ACCENT, text_color=TEXT)
+
+
+def entry(parent, fonts: Fonts, width=240, placeholder=""):
+    return ctk.CTkEntry(parent, width=width, height=32, corner_radius=5, font=fonts.body, border_width=1,
+                        fg_color=CONTROL, border_color=CONTROL_BORDER, text_color=TEXT,
+                        placeholder_text=placeholder, placeholder_text_color=TEXT_DISABLED)
 
 
 class SettingRow(ctk.CTkFrame):

@@ -1,6 +1,8 @@
 # Environment
 .venv/
 __pycache__/
+# launcher built locally by scripts/build_launcher.ps1 (source: scripts/launcher/Parroty.cs)
+/Parroty.exe
 *.pyc
 .pytest_cache/
 
@@ -26,6 +28,10 @@ datasets/
 *.mp3
 *.m4a
 *.ogg
+*.webm
+*.opus
+# voices made from samples (numbers only, but personal)
+custom_voices/
 
 # Secrets
 .env

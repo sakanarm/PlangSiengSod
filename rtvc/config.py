@@ -35,6 +35,7 @@ LIMITS = {
     "ring_mix": (0.0, 1.0),
     "voice_pitch_st": (-12.0, 12.0),
     "voice_formant_st": (-8.0, 8.0),
+    "voice_eq_amount": (0.0, 1.0),
 }
 
 
@@ -52,9 +53,10 @@ class AppConfig:
     robot_pitch_hz: float = 110.0     # monotone pitch of the robot voice
     ring_mod_hz: float = 30.0         # 0 = off; adds a metallic wobble
     ring_mix: float = 0.3
-    voice: str = "deep_male"          # key in rtvc.audio.voices.VOICES (DSP voices, no model)
+    voice: str = "deep_male"          # key in rtvc.audio.voices.VOICES or "custom:<id>" (DSP voices, no model)
     voice_pitch_st: float = -4.0      # semitones, adjustable per voice
     voice_formant_st: float = -2.0    # semitones, + = smaller / younger sounding speaker
+    voice_eq_amount: float = 1.0      # custom voices: strength of the tone match (EQ), 0..1
 
     model_path: str = ""
     index_path: str = ""
@@ -91,10 +93,10 @@ class AppConfig:
             errors.append(f"backend must be one of {BACKENDS}, got {self.backend!r}")
         if self.mode not in MODES:
             errors.append(f"mode must be one of {MODES}, got {self.mode!r}")
-        from .audio.voices import VOICES
+        from .audio.voices import VOICES, voice_exists
 
-        if self.voice not in VOICES:
-            errors.append(f"voice must be one of {tuple(VOICES)}, got {self.voice!r}")
+        if not voice_exists(self.voice):
+            errors.append(f"voice must be one of {tuple(VOICES)} or a saved custom voice, got {self.voice!r}")
         if self.theme not in THEMES:
             errors.append(f"theme must be one of {THEMES}, got {self.theme!r}")
         if self.f0_method not in F0_METHODS:
