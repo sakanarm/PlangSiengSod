@@ -59,8 +59,8 @@ Press **■ Stop recording** or **Stop** to finish. Files stay on this PC and ar
 ### เริ่มใช้งานแบบย่อ (ภาษาไทย)
 1. ติดตั้ง VB-CABLE เอง (ต้องใช้สิทธิ์ admin + รีบูต) – ดู [docs/INSTALL_WINDOWS.md](docs/INSTALL_WINDOWS.md)
 2. `setup.ps1` แล้ว `run.ps1`
-3. ในแอป: Microphone = ไมค์จริง, Output → Teams = **CABLE Input** → เลือก **Robot voice** หรือ **Other voices / เสียงอื่น** (แล้วเลือกเสียง) → กด **Start** (เปลี่ยนเสียงระหว่างทำงานได้เลย)
-4. ใน Teams: Settings → Devices → Microphone = **CABLE Output**
+3. ในแอป: หน้า **Audio devices** เลือก Microphone = ไมค์จริง แล้วกด **Use VB-CABLE** → หน้า **Voice** คลิกเลือกเสียง → กด **▶ Start** (เปลี่ยนเสียงระหว่างทำงานได้เลย)
+4. ใน Teams: Settings → Devices → Microphone = **CABLE Output** (Zoom / Meet / Discord / LINE ก็เลือกไมค์ = **CABLE Output** แบบเดียวกัน)
 5. แจ้งผู้ร่วมประชุมว่ากำลังใช้เอฟเฟกต์เสียง
 6. อยากได้ไฟล์เสียง: ระหว่างที่รันอยู่ กด **● Record** → เลือกที่เก็บไฟล์ → กด **■ Stop recording** ระบบจะได้ไฟล์ .wav ของเสียงที่แปลงแล้ว (ค่าเริ่มต้นอยู่ในโฟลเดอร์ `recordings/`)
 
@@ -90,5 +90,5 @@ speaking. Recordings and models stay on this PC; nothing is uploaded.
 `rtvc/voice_conversion` (RVC add-on, in progress; vendored upstream code in `rvc_lib/`, MIT) ·
 `tests/` · `scripts/` · `docs/`
 
-Docs: **[User manual (Thai, HTML)](docs/MANUAL.html)**, also opened by the app's *Manual / คู่มือ* button · [INSTALL_WINDOWS](docs/INSTALL_WINDOWS.md) · [TEAMS_SETUP](docs/TEAMS_SETUP.md) ·
+Docs: **[User manual (Thai, HTML)](docs/MANUAL.html)**, also opened by the app's *Manual · คู่มือ* item (left pane) · [INSTALL_WINDOWS](docs/INSTALL_WINDOWS.md) · [TEAMS_SETUP](docs/TEAMS_SETUP.md) ·
 [TROUBLESHOOTING](docs/TROUBLESHOOTING.md) · [MODEL_TRAINING](docs/MODEL_TRAINING.md)

@@ -153,11 +153,11 @@
 <section id="quick">
   <h2>4. เริ่มใช้งานใน 5 ขั้นตอน</h2>
   <ol class="steps">
-    <li><b>Microphone (input)</b> เลือกไมค์จริงของคุณ</li>
+    <li>ไปที่หน้า <b>Audio devices · อุปกรณ์</b> (เมนูด้านซ้าย) แล้วเลือก <b>Microphone (input)</b> เป็นไมค์จริงของคุณ</li>
     <li>กด <span class="btn">Use VB-CABLE</span> ช่อง <b>Output → Teams</b> จะเปลี่ยนเป็น
       <code>CABLE Input (VB-Audio Virtual Cable)</code> ให้เอง</li>
-    <li>เลือก <b>Robot voice v1</b> หรือ <b>Other voices / เสียงอื่น</b> (แล้วเลือกเสียงในช่อง Voice / เสียง) แล้วกด <span class="btn">Start</span> สถานะจะเปลี่ยนเป็น
-      <span style="color:var(--blue);font-weight:600">Processing</span> สีน้ำเงิน</li>
+    <li>กลับไปหน้า <b>Voice · เสียง</b> คลิกเลือกเสียงที่ต้องการจากช่องสี่เหลี่ยม แล้วกดปุ่มสีน้ำเงิน <span class="btn">▶ Start</span> สถานะจะเปลี่ยนเป็น
+      <span style="color:var(--blue);font-weight:600">Processing</span> และปุ่มจะกลายเป็น <span class="btn">■ Stop</span></li>
     <li>ใน Teams ไปที่ Settings → Devices → Microphone แล้วเลือก <b>CABLE Output (VB-Audio Virtual Cable)</b></li>
     <li>บอกผู้ร่วมประชุมว่ากำลังใช้เอฟเฟกต์เสียง</li>
   </ol>
@@ -165,26 +165,39 @@
 </section>
 
 <section id="screen">
-  <h2>5. หน้าจอ Voice ทีละส่วน</h2>
+  <h2>5. หน้าจอโปรแกรมทีละส่วน</h2>
+  <p>หน้าตาเหมือนแอปมาตรฐานของ Windows 11 เมนูอยู่ด้านซ้าย:</p>
+  <div class="table-wrap"><table>
+    <tr><th>เมนู</th><th>ใช้ทำอะไร</th></tr>
+    <tr><td>Voice · เสียง</td><td>เริ่ม/หยุด เลือกเสียง ปรับแต่ง ดูระดับเสียงและสถิติ</td></tr>
+    <tr><td>Audio devices · อุปกรณ์</td><td>เลือกไมค์ ช่องส่งออกไป Teams หูฟัง และทดสอบเสียงบี๊บ</td></tr>
+    <tr><td>Messages · ข้อความ</td><td>บันทึกการทำงาน คำเตือน และข้อผิดพลาด ถ้ามีคำเตือนใหม่จะมีตัวเลขในวงเล็บ เช่น <code>(2)</code></td></tr>
+    <tr><td>Hardware</td><td>ตรวจข้อมูลเครื่อง ดู<a href="#hardware">หัวข้อ 8</a></td></tr>
+    <tr><td>Manual · คู่มือ</td><td>เปิดคู่มือนี้</td></tr>
+    <tr><td>Theme</td><td>คลิกเพื่อสลับธีม System (ตาม Windows) → Light (สว่าง) → Dark (มืด) โปรแกรมจำค่าไว้</td></tr>
+  </table></div>
 
-  <h3>แถบสถานะ (Status) ด้านบน</h3>
+  <h3>แถบสถานะ (Status) ด้านบนของหน้า Voice</h3>
   <div class="table-wrap"><table>
     <tr><th>สถานะ</th><th>ความหมาย</th></tr>
     <tr><td><span class="dot" style="background:var(--orange)"></span>Not configured</td><td>ยังตั้งค่าไม่ครบหรือตั้งผิด สาเหตุจะแสดงอยู่ข้างๆ เช่น ยังไม่ได้เลือก output</td></tr>
     <tr><td><span class="dot" style="background:var(--green)"></span>Ready</td><td>ตั้งค่าครบแล้ว กด Start ได้</td></tr>
     <tr><td><span class="dot" style="background:var(--blue)"></span>Processing</td><td>กำลังแปลงเสียงและส่งออกอยู่</td></tr>
-    <tr><td><span class="dot" style="background:var(--red)"></span>Error</td><td>เกิดปัญหาและหยุดทำงาน เช่น ถอดไมค์ออก ดูรายละเอียดในช่อง Messages</td></tr>
+    <tr><td><span class="dot" style="background:var(--red)"></span>Error</td><td>เกิดปัญหาและหยุดทำงาน เช่น ถอดไมค์ออก กดลิงก์ข้างสถานะเพื่อไปที่หน้า Messages</td></tr>
   </table></div>
 
-  <h3>กรอบ Voice (โหมดเสียง)</h3>
+  <h3>เลือกเสียง (Choose a voice)</h3>
+  <p>คลิกช่องสี่เหลี่ยมของเสียงที่ต้องการ ช่องที่เลือกอยู่จะมีกรอบสีน้ำเงิน แบ่งเป็น 2 กลุ่ม:</p>
   <div class="table-wrap"><table>
-    <tr><th>ตัวเลือก</th><th>ทำอะไร</th></tr>
-    <tr><td>Robot voice v1</td><td>เสียงหุ่นยนต์ ระดับเสียงคงที่ตามค่า Robot pitch</td></tr>
-    <tr><td>Other voices / เสียงอื่น</td><td>เปลี่ยนเป็นเสียงคนแบบอื่น หรือเอฟเฟกต์ 12 แบบ (ดูตารางด้านล่าง)</td></tr>
-    <tr><td>Pass-through</td><td>ส่งเสียงจริงผ่านไปโดยไม่แปลง ใช้ทดสอบว่าเส้นทางเสียงถึง Teams</td></tr>
-    <tr><td>AI voice (RVC model)</td><td>ยังใช้ไม่ได้ในเวอร์ชันนี้</td></tr>
+    <tr><th>กลุ่ม</th><th>เสียง</th></tr>
+    <tr><td>People · เสียงคน</td><td>ชายเสียงทุ้ม, ชายร่างใหญ่, ชายหนุ่ม, ผู้หญิง, ผู้หญิงเสียงนุ่ม, เด็ก และ <b>เสียงจริง (Pass-through)</b>
+      ที่ส่งเสียงจริงผ่านไปโดยไม่แปลง ใช้ทดสอบว่าเส้นทางเสียงถึง Teams</td></tr>
+    <tr><td>Effects · เอฟเฟกต์</td><td>หุ่นยนต์ (Robot voice v1), ชิปมังก์, ยักษ์, วิทยุสื่อสาร, กระซิบ, ถ้ำ, เอเลี่ยน</td></tr>
   </table></div>
-  <p>แถบปรับเสียง robot (ใช้ได้เฉพาะโหมด Robot):</p>
+  <p>เปลี่ยนเสียงได้ทันทีแม้กำลังทำงานอยู่ ไม่ต้องกด Stop เสียง AI (RVC model) ยังใช้ไม่ได้ในเวอร์ชันนี้</p>
+  <p>ส่วน <b>Adjust · ปรับแต่ง</b> ใต้ช่องเสียงจะแสดงแถบปรับของเสียงที่เลือก
+    ปุ่ม <span class="btn">Reset to preset</span> คืนค่าแถบเป็นค่าเริ่มต้นของเสียงนั้น</p>
+  <p>แถบปรับเสียงหุ่นยนต์ (แสดงเมื่อเลือก หุ่นยนต์):</p>
   <div class="table-wrap"><table>
     <tr><th>แถบ</th><th>ช่วงค่า (ค่าเริ่มต้น)</th><th>ผล</th><th>มีผลเมื่อ</th></tr>
     <tr><td>Robot pitch (Hz)</td><td>40–400 (110)</td><td>ระดับเสียงหุ่นยนต์ ค่าต่ำเสียงทุ้ม ค่าสูงเสียงแหลม</td><td>กด Stop แล้ว Start ใหม่</td></tr>
@@ -193,8 +206,7 @@
   </table></div>
 
   <h3 id="voices">เสียงอื่น (Other voices)</h3>
-  <p>เลือกโหมด <b>Other voices / เสียงอื่น</b> แล้วเลือกเสียงจากช่อง <b>Voice / เสียง</b> ด้านขวา
-    เปลี่ยนเสียงได้ทันทีแม้กำลังทำงานอยู่ ไม่ต้องกด Stop (เสียงอาจสะดุดสั้นๆ ตอนสลับ)</p>
+  <p>ค่าของแต่ละเสียง (เปลี่ยนเสียงระหว่างทำงานได้ เสียงอาจสะดุดสั้นๆ ตอนสลับ):</p>
   <div class="table-wrap"><table>
     <tr><th>เสียง</th><th>Pitch</th><th>Formant</th><th>ลักษณะ</th></tr>
     <tr><td>ชายเสียงทุ้ม (Deep male)</td><td>−4</td><td>−2</td><td>เสียงต่ำลง ตัวใหญ่ขึ้น (ค่าเริ่มต้น)</td></tr>
@@ -225,7 +237,7 @@
   <div class="warn">ใช้อย่างโปร่งใส: บอกผู้ร่วมประชุมว่าคุณกำลังใช้เอฟเฟกต์เปลี่ยนเสียง
     อย่าใช้เพื่อปลอมเป็นคนอื่น หรือทำให้คนอื่นเข้าใจผิดว่าใครเป็นคนพูด</div>
 
-  <h3>กรอบ Audio routing (เส้นทางเสียง)</h3>
+  <h3>หน้า Audio devices · อุปกรณ์</h3>
   <div class="table-wrap"><table>
     <tr><th>ช่อง / ปุ่ม</th><th>ใช้ทำอะไร</th></tr>
     <tr><td>Microphone (input)</td><td>ไมค์จริง <b>ห้ามเลือก CABLE Output</b> เพราะจะเกิดเสียงวนกลับ (feedback) และโปรแกรมจะไม่ยอมให้เริ่ม</td></tr>
@@ -237,9 +249,9 @@
     <tr><td><span class="btn">Test beep → monitor</span></td><td>เล่นเสียงบี๊บที่หูฟัง เพื่อเช็กว่าเลือกถูกตัว</td></tr>
   </table></div>
 
-  <h3>กรอบ Levels &amp; output</h3>
+  <h3>ระดับเสียงและส่วน Output · เสียงออก</h3>
   <ul>
-    <li><b>แถบ Input / Output</b> แสดงความดัง (dBFS) ของเสียงเข้าและเสียงออก สีเขียวคือปกติ
+    <li><b>แถบ Input / Output</b> (ในกรอบสถานะด้านบน) แสดงความดัง (dBFS) ของเสียงเข้าและเสียงออก สีเขียวคือปกติ
       สีเหลืองคือค่อนข้างดัง สีแดงคือดังเกินจนเสียงอาจแตก</li>
     <li><b>Output gain (dB)</b> −24 ถึง +12 ใช้เพิ่มหรือลดเสียงที่ส่งออก ถ้าแถบ Output ขึ้นสีแดงบ่อยให้ลดลง</li>
     <li><b>Noise gate (dB, −60=off)</b> ตัดเสียงที่เบากว่าค่านี้ เช่นเสียงพัดลมตอนไม่ได้พูด
@@ -248,11 +260,11 @@
 
   <h3>ปุ่มควบคุมและตัวเลขสถิติ</h3>
   <ul>
-    <li><span class="btn">Start</span> เริ่มแปลงเสียง โปรแกรมจะตรวจการตั้งค่าก่อน ถ้ามีปัญหาจะบอกในช่อง Messages</li>
-    <li><span class="btn">Stop</span> หยุดแปลงเสียง (ถ้ากำลังอัดเสียงอยู่จะบันทึกไฟล์ให้ด้วย)</li>
+    <li><span class="btn">▶ Start</span> เริ่มแปลงเสียง โปรแกรมจะตรวจการตั้งค่าก่อน ถ้ามีปัญหาจะบอกในหน้า Messages</li>
+    <li><span class="btn">■ Stop</span> (ปุ่มเดียวกัน) หยุดแปลงเสียง (ถ้ากำลังอัดเสียงอยู่จะบันทึกไฟล์ให้ด้วย)</li>
     <li><span class="btn">● Record</span> บันทึกเสียงที่แปลงแล้วเป็นไฟล์ ดู<a href="#record">หัวข้อ 7</a></li>
   </ul>
-  <p>ข้อความข้างปุ่มเป็นค่าที่วัดจริงขณะทำงาน:</p>
+  <p>ตัวเลขใต้แถบระดับเสียงเป็นค่าที่วัดจริงขณะทำงาน:</p>
   <div class="table-wrap"><table>
     <tr><th>ค่า</th><th>ความหมาย</th><th>ค่าที่ดี</th></tr>
     <tr><td>processing … ms</td><td>เวลาที่ใช้แปลงเสียงแต่ละช่วง (ช่วงละ 50 ms)</td><td>น้อยกว่า 50 มาก</td></tr>
@@ -264,8 +276,9 @@
     <tr><td>CPU / RAM</td><td>การใช้ CPU ของทั้งเครื่องและของโปรแกรม และหน่วยความจำที่โปรแกรมใช้</td><td>—</td></tr>
   </table></div>
 
-  <h3>ช่อง Messages</h3>
-  <p>แสดงสิ่งที่โปรแกรมทำ คำเตือน และข้อผิดพลาด พร้อมคำแนะนำวิธีแก้ (บรรทัดที่ขึ้นต้นด้วย <code>-&gt;</code>)</p>
+  <h3>หน้า Messages · ข้อความ</h3>
+  <p>ปุ่ม <span class="btn">Clear</span> ล้างข้อความ ปุ่ม <span class="btn">Open log folder</span> เปิดโฟลเดอร์ไฟล์ log
+    หน้านี้แสดงสิ่งที่โปรแกรมทำ คำเตือน และข้อผิดพลาด พร้อมคำแนะนำวิธีแก้ (บรรทัดที่ขึ้นต้นด้วย <code>-&gt;</code>)</p>
 </section>
 
 <section id="teams">
@@ -300,6 +313,10 @@
   <p><b>ขั้นที่ 3 (ไม่บังคับ): ลองกับเพื่อน</b> สร้างประชุมด้วย <b>Meet now</b> แล้วชวนเพื่อนหรือใช้บัญชี/อุปกรณ์อีกเครื่องเข้าร่วม
     เพื่อฟังเสียงจากอีกฝั่งจริงๆ ถ้าทดสอบด้วยมือถือในห้องเดียวกัน ให้ปิดเสียงลำโพงมือถือหรือใส่หูฟัง จะได้ไม่มีเสียงหอน</p>
   <div class="note">บางบัญชีหรือบางเวอร์ชันของ Teams (เช่น Teams แบบส่วนตัว/ฟรี) อาจไม่มีปุ่ม Make a test call ให้ใช้ขั้นที่ 3 แทน</div>
+  <h3>ใช้กับโปรแกรมโทรอื่นบนเครื่อง</h3>
+  <p>ทำแบบเดียวกันได้กับทุกโปรแกรมที่เลือกไมค์ได้ เช่น Zoom, Google Meet (ในเบราว์เซอร์), Discord, LINE, Webex:
+    ในการตั้งค่าเสียงของโปรแกรมนั้น เลือกไมค์เป็น <code>CABLE Output (VB-Audio Virtual Cable)</code>
+    และเลือกลำโพงเป็นหูฟังหรือลำโพงปกติ (ห้ามเลือก CABLE) ถ้าโปรแกรมมีตัวลดเสียงรบกวนแรงๆ ให้ลดลงเหมือนกับ Teams</p>
 </section>
 
 <section id="record">
@@ -309,7 +326,7 @@
     <li>กด <span class="btn">● Record</span> แล้วเลือกที่เก็บไฟล์ ชื่อไฟล์จะตั้งตามวันเวลาให้อัตโนมัติ เช่น
       <code>rtvc_20261017_143005.wav</code> โฟลเดอร์เริ่มต้นคือ <code>realtimevoice\recordings\</code></li>
     <li>พูดได้เลย ปุ่มจะแสดงเวลาที่อัดไปแล้ว เช่น <span class="btn">■ Stop recording (12 s)</span></li>
-    <li>กด <span class="btn">■ Stop recording</span> (หรือกด Stop) เพื่อจบ ช่อง Messages จะแสดงตำแหน่งไฟล์</li>
+    <li>กด <span class="btn">■ Stop recording</span> (หรือกด Stop) เพื่อจบ หน้า Messages จะแสดงตำแหน่งไฟล์</li>
   </ol>
   <ul>
     <li>ไฟล์ที่ได้คือเสียงที่ส่งออกไป Teams ทุกอย่าง รวมถึง gain ด้วย</li>
@@ -321,7 +338,7 @@
 </section>
 
 <section id="hardware">
-  <h2>8. แท็บ Hardware</h2>
+  <h2>8. หน้า Hardware</h2>
   <ul>
     <li><span class="btn">Run diagnostics</span> แสดงข้อมูลเครื่อง ได้แก่ เวอร์ชัน Windows, CPU, RAM, การ์ดจอ,
       อุปกรณ์เสียง และสถานะว่าติดตั้ง VB-CABLE แล้วหรือยัง ใช้แนบไปตอนขอความช่วยเหลือได้</li>
@@ -380,7 +397,7 @@
   </ul>
 </section>
 
-<footer>คู่มือนี้อยู่ที่ <code>docs\MANUAL.html</code> ในโฟลเดอร์โปรแกรม · เปิดจากโปรแกรมได้ด้วยปุ่ม <span class="btn">Manual / คู่มือ</span> ที่มุมขวาบน</footer>
+<footer>คู่มือนี้อยู่ที่ <code>docs\MANUAL.html</code> ในโฟลเดอร์โปรแกรม · เปิดจากโปรแกรมได้ด้วยเมนู <span class="btn">Manual · คู่มือ</span> ที่มุมซ้ายล่าง</footer>
 </div>
 </body>
 </html>

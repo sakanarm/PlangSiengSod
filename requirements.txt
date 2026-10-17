@@ -6,3 +6,7 @@ scipy==1.14.1
 soundfile==0.13.1
 sounddevice==0.5.2
 psutil==7.0.0
+# UI (Windows 11 style widgets): customtkinter (CC0) + its deps darkdetect (BSD-3), packaging
+customtkinter==5.2.2
+darkdetect==0.8.0
+packaging==26.3

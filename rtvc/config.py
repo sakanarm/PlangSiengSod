@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 BACKENDS = ("auto", "onnx-dml", "onnx-cpu", "torch-cpu")
 F0_METHODS = ("rmvpe", "pm")
+THEMES = ("system", "light", "dark")     # UI appearance; "system" follows the Windows setting
 SAMPLE_RATES = (44100, 48000)
 # robot / voice = DSP effects (no model), passthrough = routing test, rvc = AI conversion (optional add-on)
 MODES = ("robot", "voice", "passthrough", "rvc")
@@ -73,6 +74,7 @@ class AppConfig:
     output_prebuffer_blocks: int = 1  # jitter buffer in blocks
 
     consent_confirmed: bool = False
+    theme: str = "system"
     extra: dict = field(default_factory=dict)
 
     # ------------------------------------------------------------------ validation
@@ -93,6 +95,8 @@ class AppConfig:
 
         if self.voice not in VOICES:
             errors.append(f"voice must be one of {tuple(VOICES)}, got {self.voice!r}")
+        if self.theme not in THEMES:
+            errors.append(f"theme must be one of {THEMES}, got {self.theme!r}")
         if self.f0_method not in F0_METHODS:
             errors.append(f"f0_method must be one of {F0_METHODS}, got {self.f0_method!r}")
         if self.samplerate not in SAMPLE_RATES:

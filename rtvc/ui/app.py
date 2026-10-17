@@ -1,4 +1,4 @@
-"""Desktop UI (tkinter). Start with:  run.ps1   or   .venv\\Scripts\\python -m rtvc"""
+"""Desktop UI (CustomTkinter, Windows 11 style). Start with:  run.ps1   or   .venv\\Scripts\\python -m rtvc"""
 
 from __future__ import annotations
 
@@ -8,20 +8,24 @@ import os
 import threading
 import tkinter as tk
 from datetime import datetime
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox
+
+import customtkinter as ctk
 
 from .. import __version__, paths
 from ..audio import devices as dv
 from ..audio.engine import AudioEngine, play_test_tone
 from ..audio.processors import ChainProcessor, PassthroughProcessor, RobotVoiceProcessor
 from ..audio.voices import VOICES, key_for_label, make_voice
-from ..config import AppConfig
+from ..config import THEMES, AppConfig
+from . import fluent as F
 
 logger = logging.getLogger(__name__)
 
-STATE_COLORS = {"Not configured": "#b36b00", "Ready": "#1a7f37", "Processing": "#0b5cad", "Error": "#c62828"}
+STATE_COLORS = {"Not configured": F.CAUTION, "Ready": F.SUCCESS, "Processing": F.ACCENT, "Error": F.CRITICAL}
 MONITOR_OFF = "(off)"
-METER_FLOOR_DB = -60.0
+PAGES = (("voice", F.I_MIC, "Voice · เสียง"), ("devices", F.I_SPEAKERS, "Audio devices · อุปกรณ์"),
+         ("messages", F.I_MESSAGE, "Messages · ข้อความ"), ("hardware", F.I_PULSE, "Hardware"))
 
 TROUBLESHOOTING = {
     "not connected": "Plug the device back in, press 'Refresh devices', then Start again.",
@@ -36,11 +40,17 @@ def _hint(msg: str) -> str:
     for key, hint in TROUBLESHOOTING.items():
         if key.lower() in msg.lower():
             return f"\n  -> {hint}"
-    return "\n  -> See 'Manual / คู่มือ' (top right) > Troubleshooting"
+    return "\n  -> See 'Manual · คู่มือ' (left pane) > Troubleshooting"
+
+
+def _split_label(label: str) -> tuple[str, str]:
+    """'ชิปมังก์ / การ์ตูน (Chipmunk)' -> ('ชิปมังก์', 'Chipmunk')"""
+    th, _, en = label.partition(" (")
+    return th.split(" / ")[0], en.rstrip(")")
 
 
 class App:
-    def __init__(self, root: tk.Tk):
+    def __init__(self, root: ctk.CTk):
         self.root = root
         self.cfg = AppConfig.load(paths.CONFIG_FILE)
         bad = self.cfg.validate()
@@ -50,6 +60,8 @@ class App:
         self.engine: AudioEngine | None = None
         self.devices: list[dv.Device] = []
         self._fatal_msg: str | None = None
+        self._unread = 0
+        self._stats_text = ""
         self.ai_available = all(importlib.util.find_spec(m) for m in ("torch", "onnxruntime"))
         try:
             import psutil
@@ -59,8 +71,17 @@ class App:
         except Exception:
             self.proc = None
 
-        root.title(f"Parroty {__version__}")
-        root.minsize(720, 620)
+        ctk.set_appearance_mode(self.cfg.theme)
+        self.fonts = F.Fonts()
+        root.title("Parroty")
+        root.configure(fg_color=F.WINDOW)
+        # fits a 1080p screen at 125 % scaling with the taskbar; centred in the upper part of the screen
+        scale = ctk.ScalingTracker.get_window_scaling(root)
+        w, h = 1100, 700
+        x = max(0, int((root.winfo_screenwidth() / scale - w) / 2))
+        y = max(0, int((root.winfo_screenheight() / scale - h - 48 - 32) / 2))
+        root.geometry(f"{w}x{h}+{x}+{y}")
+        root.minsize(900, 560)
         root.protocol("WM_DELETE_WINDOW", self.on_close)
         self._build()
         self.refresh_devices(initial=True)
@@ -68,153 +89,256 @@ class App:
 
     # ================================================================ layout
     def _build(self):
-        top = ttk.Frame(self.root, padding=(10, 8))
-        top.pack(fill="x")
-        ttk.Label(top, text="Status:").pack(side="left")
-        self.state_lbl = tk.Label(top, text="Not configured", font=("Segoe UI", 11, "bold"))
-        self.state_lbl.pack(side="left", padx=6)
-        self.state_detail = ttk.Label(top, text="")
-        self.state_detail.pack(side="left", padx=6)
-        ttk.Button(top, text="Manual / คู่มือ", command=self.open_manual).pack(side="right")
+        fn = self.fonts
+        self.root.columnconfigure(1, weight=1)
+        self.root.rowconfigure(0, weight=1)
 
-        nb = ttk.Notebook(self.root)
-        nb.pack(fill="both", expand=True, padx=10, pady=(0, 10))
-        conv = ttk.Frame(nb, padding=10)
-        hw = ttk.Frame(nb, padding=10)
-        nb.add(conv, text="Voice")
-        nb.add(hw, text="Hardware")
-        self._build_convert(conv)
-        self._build_hardware(hw)
+        # ---- navigation pane
+        nav = ctk.CTkFrame(self.root, fg_color="transparent", width=250)
+        nav.grid(row=0, column=0, sticky="ns", padx=(8, 0), pady=8)
+        nav.pack_propagate(False)
+        brand = ctk.CTkFrame(nav, fg_color="transparent")
+        brand.pack(fill="x", padx=8, pady=(8, 18))
+        F.label(brand, F.I_MIC, fn.icon(16), F.ON_ACCENT, fg_color=F.ACCENT, corner_radius=6,
+                width=30, height=30).pack(side="left")
+        F.label(brand, "Parroty", fn.body_strong).pack(side="left", padx=(10, 6))
+        F.label(brand, "v" + ".".join(__version__.split(".")[:2]), fn.caption, F.TEXT2).pack(side="left", pady=(2, 0))
+        self.nav = {}
+        for key, icon, text in PAGES:
+            item = F.NavItem(nav, fn, icon, text, lambda k=key: self.show_page(k))
+            item.pack(fill="x", pady=1)
+            self.nav[key] = item
+        self.theme_item = F.NavItem(nav, fn, F.I_THEME, "", self.cycle_theme)
+        self.theme_item.pack(side="bottom", fill="x", pady=1)
+        F.NavItem(nav, fn, F.I_HELP, "Manual · คู่มือ", self.open_manual).pack(side="bottom", fill="x", pady=1)
+        self._theme_text()
 
-    def _build_convert(self, f):
-        # ---- voice mode
-        mode = ttk.LabelFrame(f, text="Voice", padding=8)
-        mode.pack(fill="x")
+        # ---- pages
+        content = ctk.CTkFrame(self.root, fg_color="transparent")
+        content.grid(row=0, column=1, sticky="nsew", padx=(12, 0))
+        content.rowconfigure(0, weight=1)
+        content.columnconfigure(0, weight=1)
+        self.pages = {}
+        self.pages["voice"] = ctk.CTkScrollableFrame(
+            content, fg_color="transparent", scrollbar_button_color=F.TRACK, scrollbar_button_hover_color=F.TEXT2)
+        for key in ("devices", "messages", "hardware"):
+            self.pages[key] = ctk.CTkFrame(content, fg_color="transparent")
+        for p in self.pages.values():
+            p.grid(row=0, column=0, sticky="nsew")
+        self._build_voice(self.pages["voice"])
+        self._build_devices(self.pages["devices"])
+        self._build_messages(self.pages["messages"])
+        self._build_hardware(self.pages["hardware"])
+        self.show_page("voice")
+
+    def _page_title(self, page, text):
+        F.label(page, text, self.fonts.title, anchor="w").pack(fill="x", padx=(4, 28), pady=(18, 14))
+
+    def _section(self, page, title, caption=""):
+        F.label(page, title, self.fonts.body_strong, anchor="w").pack(fill="x", padx=(4, 28), pady=(22, 0))
+        if caption:
+            F.label(page, caption, self.fonts.caption, F.TEXT2, anchor="w").pack(fill="x", padx=(4, 28))
+
+    def _build_voice(self, page):
+        fn = self.fonts
+        self._page_title(page, "Voice · เสียง")
+
+        # ---- status / start card
+        hero = F.card(page)
+        hero.pack(fill="x", padx=(0, 24))
+        hero.columnconfigure(0, weight=1)
+        top = ctk.CTkFrame(hero, fg_color="transparent")
+        top.grid(row=0, column=0, sticky="ew", padx=20, pady=(16, 0))
+        top.columnconfigure(2, weight=1)
+        self.state_dot = F.label(top, "●", (fn.body[0], 16), F.CAUTION, width=16)
+        self.state_dot.grid(row=0, column=0, padx=(0, 8))
+        self.state_lbl = F.label(top, "Not configured", fn.subtitle, anchor="w")
+        self.state_lbl.grid(row=0, column=1, sticky="w")
+        self.rec_btn = F.button(top, "●  Record", self.toggle_record, fn, width=150)
+        self.rec_btn.grid(row=0, column=3, padx=(8, 0))
+        F.set_enabled(self.rec_btn, False)
+        self.run_btn = F.button(top, "▶  Start", self.toggle_run, fn, accent=True, width=130)
+        self.run_btn.grid(row=0, column=4, padx=(8, 0))
+        info = ctk.CTkFrame(hero, fg_color="transparent")
+        info.grid(row=1, column=0, sticky="ew", padx=(44, 20))
+        self.state_detail = F.label(info, "", fn.body, F.TEXT2, anchor="w", justify="left", wraplength=560)
+        self.state_detail.pack(side="left")
+        self.state_link = F.link(info, "", lambda: self.show_page(self._link_page), fn)
+        self._link_page = "devices"
+        meters = ctk.CTkFrame(hero, fg_color="transparent")
+        meters.grid(row=2, column=0, sticky="ew", padx=20, pady=(12, 0))
+        self.in_meter = F.Meter(meters, fn, "Input")
+        self.in_meter.pack(fill="x", pady=2)
+        self.out_meter = F.Meter(meters, fn, "Output")
+        self.out_meter.pack(fill="x", pady=2)
+        self.stats_lbl = F.label(hero, "", fn.caption, F.TEXT2, anchor="w", justify="left")
+        self.stats_lbl.grid(row=3, column=0, sticky="w", padx=20, pady=(6, 14))
+
+        # ---- voice tiles
         self.mode = tk.StringVar(value=self.cfg.mode if self.cfg.mode != "rvc" or self.ai_available else "robot")
-        ttk.Radiobutton(mode, text="Robot voice v1  (DSP effect, no AI model)", value="robot",
-                        variable=self.mode, command=self._mode_changed).grid(row=0, column=0, sticky="w")
-        ttk.Radiobutton(mode, text="Other voices / เสียงอื่น  (DSP effect, no AI model)", value="voice",
-                        variable=self.mode, command=self._mode_changed).grid(row=1, column=0, sticky="w")
-        ttk.Radiobutton(mode, text="Pass-through  (no change - routing test)", value="passthrough",
-                        variable=self.mode, command=self._mode_changed).grid(row=2, column=0, sticky="w")
-        rvc = ttk.Radiobutton(mode, text="AI voice (RVC model)" + ("" if self.ai_available else
-                              "  - add-on not installed (setup.ps1 -WithAI)"), value="rvc",
-                              variable=self.mode, command=self._mode_changed)
-        rvc.grid(row=3, column=0, sticky="nw")
-        rvc.state(["disabled"])  # RVC streaming UI arrives with the AI add-on milestone
-        mode.columnconfigure(1, weight=1)
-
-        self.robot_frame = ttk.Frame(mode)
-        self.robot_frame.grid(row=0, column=1, rowspan=4, sticky="ne", padx=(30, 0))
-        self.robot_pitch = self._slider(self.robot_frame, 0, "Robot pitch (Hz)", 40, 400, self.cfg.robot_pitch_hz, 0)
-        self.ring_hz = self._slider(self.robot_frame, 1, "Metallic wobble (Hz, 0=off)", 0, 200, self.cfg.ring_mod_hz, 0)
-        self.ring_mix = self._slider(self.robot_frame, 2, "Wobble amount", 0, 1, self.cfg.ring_mix, 2)
-        for v in (self.robot_pitch, self.ring_hz, self.ring_mix):
-            v.trace_add("write", lambda *_: self._live_update())
-
-        self.voice_frame = ttk.Frame(mode)
-        self.voice_frame.grid(row=0, column=1, rowspan=4, sticky="ne", padx=(30, 0))
-        ttk.Label(self.voice_frame, text="Voice / เสียง").grid(row=0, column=0, sticky="w")
         voice = VOICES.get(self.cfg.voice) or next(iter(VOICES.values()))
         self.voice_var = tk.StringVar(value=voice.label)
-        self.voice_cb = ttk.Combobox(self.voice_frame, textvariable=self.voice_var, state="readonly", width=30,
-                                     values=[v.label for v in VOICES.values()], height=len(VOICES))
-        self.voice_cb.grid(row=0, column=1, columnspan=2, sticky="w", padx=6, pady=(0, 4))
-        self.voice_cb.bind("<<ComboboxSelected>>", lambda e: self._voice_selected())
-        self.voice_pitch = self._slider(self.voice_frame, 1, "Pitch (semitones)", -12, 12, self.cfg.voice_pitch_st, 1)
-        self.voice_formant = self._slider(self.voice_frame, 2, "Formant / voice size", -8, 8,
-                                          self.cfg.voice_formant_st, 1)
-        self.voice_desc = ttk.Label(self.voice_frame, text="", foreground="#555", wraplength=330)
-        self.voice_desc.grid(row=3, column=0, columnspan=3, sticky="w", pady=(2, 0))
-        for v in (self.voice_pitch, self.voice_formant):
-            v.trace_add("write", lambda *_: self._live_update())
+        self._section(page, "Choose a voice · เลือกเสียง",
+                      "Sound effects (DSP) – no AI model, runs on the CPU. You can switch while running.")
+        people = [k for k, v in VOICES.items() if v.group == "person"] + ["passthrough"]
+        effects = ["robot"] + [k for k, v in VOICES.items() if v.group == "effect"]
+        self.tiles = {}
+        for title, keys in (("People · เสียงคน", people), ("Effects · เอฟเฟกต์", effects)):
+            F.label(page, title, fn.caption, F.TEXT2, anchor="w").pack(fill="x", padx=4, pady=(10, 4))
+            grid = ctk.CTkFrame(page, fg_color="transparent")
+            grid.pack(fill="x", padx=(0, 24))
+            for i, key in enumerate(keys):
+                grid.columnconfigure(i, weight=1, uniform="tile")
+                th, en = self._tile_text(key)
+                icon, sym = F.VOICE_ICONS.get(key, (F.I_MIC, False))
+                t = F.Tile(grid, fn, icon, sym, th, en, lambda k=key: self.select_voice(k))
+                t.grid(row=0, column=i, sticky="nsew", padx=(0 if i == 0 else 3, 3 if i < len(keys) - 1 else 0))
+                self.tiles[key] = t
+        if not self.ai_available:
+            F.label(page, "AI voice (RVC model): add-on not installed – not available in this version.",
+                    fn.caption, F.TEXT_DISABLED, anchor="w").pack(fill="x", padx=4, pady=(8, 0))
 
-        # ---- devices
-        dev = ttk.LabelFrame(f, text="Audio routing", padding=8)
-        dev.pack(fill="x", pady=8)
-        dev.columnconfigure(1, weight=1)
-        self.in_var, self.out_var, self.mon_var = tk.StringVar(), tk.StringVar(), tk.StringVar()
-        self.in_cb = self._combo(dev, 0, "Microphone (input)", self.in_var)
-        self.out_cb = self._combo(dev, 1, "Output -> Teams", self.out_var)
-        self.mon_cb = self._combo(dev, 2, "Monitor (headphones)", self.mon_var)
-        btns = ttk.Frame(dev)
-        btns.grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
-        ttk.Button(btns, text="Refresh devices", command=self.refresh_devices).pack(side="left")
-        ttk.Button(btns, text="Use VB-CABLE", command=self.auto_cable).pack(side="left", padx=6)
-        ttk.Button(btns, text="Test beep -> output", command=lambda: self.test_tone("out")).pack(side="left")
-        ttk.Button(btns, text="Test beep -> monitor", command=lambda: self.test_tone("mon")).pack(side="left", padx=6)
+        # ---- adjust
+        self._section(page, "Adjust · ปรับแต่ง", "Changes apply immediately, also while running.")
+        self.adjust = ctk.CTkFrame(page, fg_color="transparent")
+        self.adjust.pack(fill="x", padx=(0, 24), pady=(6, 0))
+        self.sel_row = F.SettingRow(self.adjust, fn, F.I_MIC, "", "")
+        self.reset_btn = F.button(self.sel_row.right, "Reset to preset", self._reset_voice, fn, width=140)
+        self.reset_btn.pack()
 
-        # ---- levels
-        lv = ttk.LabelFrame(f, text="Levels & output", padding=8)
-        lv.pack(fill="x")
-        lv.columnconfigure(1, weight=1)
-        ttk.Label(lv, text="Input").grid(row=0, column=0, sticky="w")
-        self.in_meter = tk.Canvas(lv, height=14, bg="#222", highlightthickness=0)
-        self.in_meter.grid(row=0, column=1, sticky="ew", padx=6, pady=2)
-        ttk.Label(lv, text="Output").grid(row=1, column=0, sticky="w")
-        self.out_meter = tk.Canvas(lv, height=14, bg="#222", highlightthickness=0)
-        self.out_meter.grid(row=1, column=1, sticky="ew", padx=6, pady=2)
-        g = ttk.Frame(lv)
-        g.grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
-        self.gain = self._slider(g, 0, "Output gain (dB)", -24, 12, self.cfg.output_gain_db, 0)
-        self.gate = self._slider(g, 1, "Noise gate (dB, -60=off)", -60, 0, self.cfg.input_gate_db, 0)
+        def row(icon, title, desc, lo, hi, value, digits, steps, unit=""):
+            r = F.SettingRow(self.adjust, fn, icon, title, desc)
+            var, s = F.slider(r.right, fn, lo, hi, value, digits, steps, unit)
+            var.trace_add("write", lambda *_: self._live_update())
+            return r, var, s
 
-        # ---- controls + stats
-        ctl = ttk.Frame(f)
-        ctl.pack(fill="x", pady=8)
-        self.start_btn = ttk.Button(ctl, text="Start", command=self.start)
-        self.start_btn.pack(side="left")
-        self.stop_btn = ttk.Button(ctl, text="Stop", command=self.stop, state="disabled")
-        self.stop_btn.pack(side="left", padx=6)
-        self.rec_btn = ttk.Button(ctl, text="● Record", command=self.toggle_record, state="disabled")
-        self.rec_btn.pack(side="left")
-        self.stats_lbl = ttk.Label(ctl, text="", font=("Consolas", 9), justify="left")
-        self.stats_lbl.pack(side="left", padx=12)
+        r1, self.robot_pitch, _ = row(F.I_ROBOT, "Robot pitch (Hz)", "Pitch of the robot voice. Applies at the next Start.",
+                                      40, 400, self.cfg.robot_pitch_hz, 0, 360, " Hz")
+        r2, self.ring_hz, s2 = row(F.I_RADIO, "Metallic wobble (Hz, 0=off)", "Speed of the metallic wobble.",
+                                   0, 200, self.cfg.ring_mod_hz, 0, 200, " Hz")
+        r3, self.ring_mix, s3 = row(F.I_VOLUME, "Wobble amount", "Strength of the wobble.", 0, 1, self.cfg.ring_mix, 2, 100)
+        self.robot_rows = (r1, r2, r3)
+        r4, self.voice_pitch, s4 = row(F.I_MUSIC, "Pitch (semitones)", "+12 = one octave higher, −12 = one octave lower.",
+                                       -12, 12, self.cfg.voice_pitch_st, 1, 48, " st")
+        r5, self.voice_formant, s5 = row(F.I_EMOJI, "Formant / voice size",
+                                         "Size of the speaker you hear: − = bigger / deeper, + = smaller. Pitch stays.",
+                                         -8, 8, self.cfg.voice_formant_st, 1, 32, " st")
+        self.voice_rows, self.voice_sliders = (r4, r5), (s4, s5)
 
-        ttk.Label(f, text="Be transparent: tell meeting participants you are using a voice effect.",
-                  foreground="#555").pack(anchor="w")
-        msg = ttk.LabelFrame(f, text="Messages", padding=4)
-        msg.pack(fill="both", expand=True, pady=(6, 0))
-        self.msg = tk.Text(msg, height=6, wrap="word", font=("Segoe UI", 9))
-        self.msg.pack(fill="both", expand=True)
+        self._section(page, "Output · เสียงออก")
+        out = ctk.CTkFrame(page, fg_color="transparent")
+        out.pack(fill="x", padx=(0, 24), pady=(6, 0))
+        r = F.SettingRow(out, fn, F.I_VOLUME, "Output gain (dB)", "Lower it if the Output meter turns red.")
+        r.pack(fill="x", pady=2)
+        self.gain, _ = F.slider(r.right, fn, -24, 12, self.cfg.output_gain_db, 1, 72, " dB")
+        r = F.SettingRow(out, fn, F.I_MIC, "Noise gate (dB, −60 = off)",
+                         "Mutes sounds quieter than this, e.g. a fan. Try −45; too high cuts your words.")
+        r.pack(fill="x", pady=2)
+        self.gate, _ = F.slider(r.right, fn, -60, 0, self.cfg.input_gate_db, 0, 60, " dB")
+
+        bar = ctk.CTkFrame(page, fg_color=F.INFO_BG, corner_radius=7)
+        bar.pack(fill="x", padx=(0, 24), pady=(22, 24))
+        F.label(bar, F.I_INFO, fn.icon(16), F.ACCENT).pack(side="left", padx=(16, 10), pady=12)
+        F.label(bar, "Be transparent: tell meeting participants you are using a voice effect. "
+                     "Do not use it to pretend to be someone else.", fn.body, anchor="w",
+                justify="left", wraplength=640).pack(side="left", pady=12)
         self._mode_changed()
 
-    def _build_hardware(self, f):
-        bar = ttk.Frame(f)
-        bar.pack(fill="x")
-        self.diag_btn = ttk.Button(bar, text="Run diagnostics", command=self.run_diagnostics)
+    def _tile_text(self, key):
+        if key == "robot":
+            return "หุ่นยนต์", "Robot"
+        if key == "passthrough":
+            return "เสียงจริง", "Pass-through"
+        return _split_label(VOICES[key].label)
+
+    def _build_devices(self, page):
+        fn = self.fonts
+        self._page_title(page, "Audio devices · อุปกรณ์เสียง")
+        self.in_var, self.out_var, self.mon_var = tk.StringVar(), tk.StringVar(), tk.StringVar()
+
+        def row(icon, title, desc, var):
+            r = F.SettingRow(page, fn, icon, title, desc)
+            r.pack(fill="x", padx=(0, 28), pady=2)
+            box, om = F.option_menu(r.right, var, lambda _v: self._update_state(), fn)
+            box.pack(side="right")
+            return r, om
+
+        _, self.in_cb = row(F.I_MIC, "Microphone (input)", "Your real microphone. Never choose CABLE Output here.",
+                            self.in_var)
+        r, self.out_cb = row(F.I_SPEAKERS, "Output → Teams",
+                             "CABLE Input (VB-Audio Virtual Cable). In Teams choose the microphone CABLE Output.",
+                             self.out_var)
+        F.button(r.right, "Use VB-CABLE", self.auto_cable, fn).pack(side="right", padx=(0, 8))
+        _, self.mon_cb = row(F.I_HEADPHONES, "Monitor (headphones)",
+                             "Optional: hear your converted voice. Use headphones, not speakers.", self.mon_var)
+
+        r = F.SettingRow(page, fn, F.I_VOLUME, "Test the route", "Plays a short beep. Stop processing first.")
+        r.pack(fill="x", padx=(0, 28), pady=(14, 2))
+        F.button(r.right, "Test beep → monitor", lambda: self.test_tone("mon"), fn, width=170).pack(side="right")
+        F.button(r.right, "Test beep → output", lambda: self.test_tone("out"), fn, width=170).pack(side="right", padx=(0, 8))
+        r = F.SettingRow(page, fn, F.I_SETTINGS, "Refresh devices", "After plugging in a microphone or headphones.")
+        r.pack(fill="x", padx=(0, 28), pady=2)
+        F.button(r.right, "Refresh devices", self.refresh_devices, fn, width=150).pack(side="right")
+
+    def _build_messages(self, page):
+        fn = self.fonts
+        self._page_title(page, "Messages · ข้อความ")
+        bar = ctk.CTkFrame(page, fg_color="transparent")
+        bar.pack(fill="x", padx=(0, 28), pady=(0, 8))
+        F.button(bar, "Clear", lambda: self.msg.delete("1.0", "end"), fn, width=90).pack(side="left")
+        F.button(bar, "Open log folder", self.open_logs, fn, width=150).pack(side="left", padx=8)
+        self.msg = ctk.CTkTextbox(page, font=fn.body, wrap="word", fg_color=F.CARD, border_color=F.BORDER,
+                                  border_width=1, corner_radius=7, text_color=F.TEXT,
+                                  scrollbar_button_color=F.TRACK, scrollbar_button_hover_color=F.TEXT2)
+        self.msg.pack(fill="both", expand=True, padx=(0, 28), pady=(0, 24))
+
+    def _build_hardware(self, page):
+        fn = self.fonts
+        self._page_title(page, "Hardware")
+        bar = ctk.CTkFrame(page, fg_color="transparent")
+        bar.pack(fill="x", padx=(0, 28), pady=(0, 8))
+        self.diag_btn = F.button(bar, "Run diagnostics", self.run_diagnostics, fn, accent=True, width=150)
         self.diag_btn.pack(side="left")
-        self.diag_gpu_btn = ttk.Button(bar, text="Test GPU (DirectML) inference", command=lambda: self.run_diagnostics(True))
-        self.diag_gpu_btn.pack(side="left", padx=6)
+        self.diag_gpu_btn = F.button(bar, "Test GPU (DirectML) inference", lambda: self.run_diagnostics(True), fn,
+                                     width=240)
+        self.diag_gpu_btn.pack(side="left", padx=8)
         if not self.ai_available:
-            self.diag_gpu_btn.state(["disabled"])
-        self.diag = tk.Text(f, wrap="none", font=("Consolas", 9))
-        self.diag.pack(fill="both", expand=True, pady=(8, 0))
+            F.set_enabled(self.diag_gpu_btn, False)
+        self.diag = ctk.CTkTextbox(page, font=fn.mono, wrap="none", fg_color=F.CARD, border_color=F.BORDER,
+                                   border_width=1, corner_radius=7, text_color=F.TEXT,
+                                   scrollbar_button_color=F.TRACK, scrollbar_button_hover_color=F.TEXT2)
+        self.diag.pack(fill="both", expand=True, padx=(0, 28), pady=(0, 24))
         self.diag.insert("end", "Press 'Run diagnostics'.")
 
-    def _slider(self, parent, row, label, lo, hi, value, digits):
-        var = tk.DoubleVar(value=value)
-        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w")
-        ttk.Scale(parent, from_=lo, to=hi, variable=var, length=180).grid(row=row, column=1, padx=6)
-        val = ttk.Label(parent, width=6)
-        val.grid(row=row, column=2, sticky="w")
-        fmt = f"{{:.{digits}f}}"
-        var.trace_add("write", lambda *_: val.configure(text=fmt.format(var.get())))
-        val.configure(text=fmt.format(value))
-        return var
-
-    def _combo(self, parent, row, label, var):
-        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", pady=2)
-        cb = ttk.Combobox(parent, textvariable=var, state="readonly")
-        cb.grid(row=row, column=1, sticky="ew", padx=6, pady=2)
-        cb.bind("<<ComboboxSelected>>", lambda e: self._update_state())
-        return cb
-
     # ================================================================ helpers
+    def show_page(self, key):
+        for k, p in self.pages.items():
+            if k == key:
+                p.grid()
+            else:
+                p.grid_remove()
+        for k, item in self.nav.items():
+            item.set_selected(k == key)
+        self.page = key
+        if key == "messages":
+            self._unread = 0
+            self.nav["messages"].text.configure(text="Messages · ข้อความ")
+
+    def cycle_theme(self):
+        self.cfg.theme = THEMES[(THEMES.index(self.cfg.theme) + 1) % len(THEMES)]
+        ctk.set_appearance_mode(self.cfg.theme)
+        self._theme_text()
+
+    def _theme_text(self):
+        self.theme_item.text.configure(text=f"Theme: {self.cfg.theme.capitalize()}")
+
     def log(self, text: str, level=logging.INFO):
         logger.log(level, text)
-        self.msg.insert("end", text + "\n")
+        self.msg.insert("end", datetime.now().strftime("%H:%M:%S  ") + text + "\n")
         self.msg.see("end")
+        if level >= logging.WARNING and getattr(self, "page", "") != "messages":
+            self._unread += 1
+            self.nav["messages"].text.configure(text=f"Messages · ข้อความ  ({self._unread})")
 
     def open_manual(self):
         """Open the local HTML manual in the default browser (offline file, nothing is fetched)."""
@@ -226,38 +350,73 @@ class App:
         if not webbrowser.open(paths.MANUAL_FILE.as_uri()):
             self.log(f"Could not open a browser. Open this file manually: {paths.MANUAL_FILE}", logging.WARNING)
 
+    def open_logs(self):
+        paths.LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        os.startfile(paths.LOGS_DIR)  # noqa: S606 - local folder in Explorer
+
     def set_state(self, state: str, detail: str = ""):
-        self.state_lbl.configure(text=state, fg=STATE_COLORS[state])
+        self.state_dot.configure(text_color=STATE_COLORS[state])
+        self.state_lbl.configure(text=state)
         self.state_detail.configure(text=detail)
-
-    def _mode_changed(self):
-        m = self.mode.get()
-        if m == "voice":
-            self.robot_frame.grid_remove()
-            self.voice_frame.grid()
+        link = {"Not configured": ("devices", "Audio devices ›"), "Error": ("messages", "Messages ›")}.get(state)
+        if link:
+            self._link_page = link[0]
+            self.state_link.configure(text=link[1])
+            self.state_link.pack(side="left", padx=(8, 0))
         else:
-            self.voice_frame.grid_remove()
-            self.robot_frame.grid()
-        on = m == "robot"
-        for w in self.robot_frame.winfo_children():
-            if isinstance(w, ttk.Scale):
-                w.state(["!disabled"] if on else ["disabled"])
-        self._voice_widgets()
-        self._swap_processor()
+            self.state_link.pack_forget()
 
-    def _voice_widgets(self):
-        v = VOICES[key_for_label(self.voice_var.get())]
-        self.voice_desc.configure(text=v.description + ("" if v.adjustable else "  (no pitch/formant controls)"))
-        for w in self.voice_frame.winfo_children():
-            if isinstance(w, ttk.Scale):
-                w.state(["!disabled"] if v.adjustable else ["disabled"])
+    def _selected_key(self) -> str:
+        m = self.mode.get()
+        return key_for_label(self.voice_var.get()) if m == "voice" else m
 
-    def _voice_selected(self):
-        """A newly selected voice starts from its own default pitch/formant."""
+    def select_voice(self, key: str):
+        """Tile click. A voice starts from its own default pitch/formant."""
+        if key in ("robot", "passthrough"):
+            self.mode.set(key)
+        else:
+            v = VOICES[key]
+            self.mode.set("voice")
+            self.voice_var.set(v.label)
+            self.voice_pitch.set(v.pitch_st)
+            self.voice_formant.set(v.formant_st)
+        self._mode_changed()
+
+    def _reset_voice(self):
         v = VOICES[key_for_label(self.voice_var.get())]
         self.voice_pitch.set(v.pitch_st)
         self.voice_formant.set(v.formant_st)
-        self._voice_widgets()
+
+    def _mode_changed(self):
+        key = self._selected_key()
+        for k, t in self.tiles.items():
+            t.set_selected(k == key)
+        icon, sym = F.VOICE_ICONS.get(key, (F.I_MIC, False))
+        th, en = self._tile_text(key)
+        rows = [self.sel_row]
+        if key == "robot":
+            desc = "Classic robot effect with a fixed pitch and an optional metallic wobble."
+            rows += self.robot_rows
+        elif key == "passthrough":
+            desc = "No change: your real voice is sent. Use it to test the route to Teams."
+        else:
+            v = VOICES[key]
+            th, en = _split_label(v.label)
+            th = v.label.partition(" (")[0]
+            desc = v.description + ("" if v.adjustable else "  No pitch / formant controls for this voice.")
+            rows += self.voice_rows
+            for s in self.voice_sliders:
+                F.set_enabled(s, v.adjustable)
+            F.set_enabled(self.reset_btn, v.adjustable)
+        self.sel_row.set_text(f"{th} · {en}", desc, icon, self.fonts, sym)
+        if key in VOICES:
+            self.reset_btn.pack()
+        else:
+            self.reset_btn.pack_forget()
+        for r in (self.sel_row, *self.robot_rows, *self.voice_rows):
+            r.pack_forget()
+        for r in rows:
+            r.pack(fill="x", pady=2)
         self._swap_processor()
 
     def _swap_processor(self):
@@ -310,7 +469,7 @@ class App:
         if errors:
             self.set_state("Not configured", errors[0])
         else:
-            self.set_state("Ready", warnings[0] if warnings else "")
+            self.set_state("Ready", warnings[0] if warnings else "Press Start, then choose 'CABLE Output' as the microphone in Teams.")
 
     # ================================================================ actions
     def refresh_devices(self, initial=False):
@@ -326,9 +485,9 @@ class App:
         api = self.cfg.host_api
         ins = [d.name for d in dv.inputs(self.devices, api)]
         outs = [d.name for d in dv.outputs(self.devices, api)]
-        self.in_cb["values"] = ins
-        self.out_cb["values"] = outs
-        self.mon_cb["values"] = [MONITOR_OFF] + [n for n in outs if not any(h in n.lower() for h in dv.VIRTUAL_HINTS)]
+        self.in_cb.configure(values=ins)
+        self.out_cb.configure(values=outs)
+        self.mon_cb.configure(values=[MONITOR_OFF] + [n for n in outs if not any(h in n.lower() for h in dv.VIRTUAL_HINTS)])
         if initial:
             self.in_var.set(self.cfg.input_device or next(
                 (d.name for d in dv.inputs(self.devices, api) if not d.is_virtual), ""))
@@ -357,10 +516,10 @@ class App:
     def test_tone(self, which):
         name = self.out_var.get() if which == "out" else self.mon_var.get()
         if not name or name == MONITOR_OFF:
-            self.log("Choose a device first.")
+            self.log("Choose a device first.", logging.WARNING)
             return
         if self.engine and self.engine.stats.running:
-            self.log("Stop processing before the beep test.")
+            self.log("Stop processing before the beep test.", logging.WARNING)
             return
         d = dv.find_device(self.devices, name, self.cfg.host_api, "output")
         if d is None:
@@ -386,6 +545,12 @@ class App:
         if c.mode == "passthrough":
             return PassthroughProcessor()
         raise RuntimeError("AI voice mode is not available in this build.")
+
+    def toggle_run(self):
+        if self.engine and self.engine.stats.running:
+            self.stop()
+        else:
+            self.start()
 
     def start(self):
         c = self._collect_cfg()
@@ -417,9 +582,8 @@ class App:
             self.log(f"Start failed: {e}{_hint(str(e))}", logging.ERROR)
             return
         c.save(paths.CONFIG_FILE)
-        self.start_btn.state(["disabled"])
-        self.stop_btn.state(["!disabled"])
-        self.rec_btn.state(["!disabled"])
+        self.run_btn.configure(text="■  Stop")
+        F.set_enabled(self.rec_btn, True)
         self.set_state("Processing", proc.name)
         self.log(f"Started: {ind.name} -> {proc.name} -> {outd.name}" + (f" (+ monitor {mon.name})" if mon else ""))
 
@@ -430,9 +594,8 @@ class App:
             self.engine.stop()
             self.log(f"Stopped. blocks={s.blocks_out} dropped={s.dropped_blocks} underruns={s.underruns} "
                      f"errors={s.processing_errors} avg processing={s.proc_ms_avg:.1f} ms")
-        self.start_btn.state(["!disabled"])
-        self.stop_btn.state(["disabled"])
-        self.rec_btn.state(["disabled"])
+        self.run_btn.configure(text="▶  Start")
+        F.set_enabled(self.rec_btn, False)
         self._update_state()
 
     # ---- recording of the processed voice (local WAV file, only on explicit request)
@@ -460,7 +623,7 @@ class App:
         except Exception as e:
             self.log(f"Cannot record to {path}: {e}", logging.ERROR)
             return
-        self.rec_btn.configure(text="■ Stop recording")
+        self.rec_btn.configure(text="■  Stop recording")
         self.log(f"Recording processed voice to {path}")
 
     def stop_record(self):
@@ -469,7 +632,7 @@ class App:
             return
         self.engine.recorder = None
         secs = rec.close()
-        self.rec_btn.configure(text="● Record")
+        self.rec_btn.configure(text="●  Record")
         extra = f", {rec.dropped} blocks skipped (disk too slow)" if rec.dropped else ""
         if rec.error:
             self.log(f"Recording failed: {rec.error}", logging.ERROR)
@@ -483,7 +646,7 @@ class App:
         self.diag.delete("1.0", "end")
         self.diag.insert("end", "Running" + (" GPU inference test" if verify_gpu else "") + "...\n")
         for b in (self.diag_btn, self.diag_gpu_btn):
-            b.state(["disabled"])
+            F.set_enabled(b, False)
 
         def run():
             from ..hardware import diagnostics
@@ -503,20 +666,11 @@ class App:
     def _show_diag(self, text):
         self.diag.delete("1.0", "end")
         self.diag.insert("end", text)
-        self.diag_btn.state(["!disabled"])
+        F.set_enabled(self.diag_btn, True)
         if self.ai_available:
-            self.diag_gpu_btn.state(["!disabled"])
+            F.set_enabled(self.diag_gpu_btn, True)
 
     # ================================================================ periodic UI update
-    def _meter(self, canvas: tk.Canvas, db: float):
-        w = max(canvas.winfo_width(), 1)
-        frac = min(max((db - METER_FLOOR_DB) / -METER_FLOOR_DB, 0.0), 1.0)
-        canvas.delete("all")
-        color = "#2e7d32" if db < -12 else "#f9a825" if db < -3 else "#c62828"
-        canvas.create_rectangle(0, 0, int(w * frac), 14, fill=color, width=0)
-        canvas.create_text(w - 4, 7, text=f"{db:.0f} dBFS" if db > -120 else "-inf", anchor="e",
-                           fill="#ddd", font=("Segoe UI", 7))
-
     def _poll(self):
         if self._fatal_msg:
             msg, self._fatal_msg = self._fatal_msg, None
@@ -528,25 +682,30 @@ class App:
             try:
                 import psutil
 
-                sys_txt = (f"CPU {psutil.cpu_percent(None):4.0f}% (app {self.proc.cpu_percent(None) / psutil.cpu_count():.0f}%)  "
-                           f"RAM app {self.proc.memory_info().rss / 2**20:.0f} MB")
+                sys_txt = (f"CPU {psutil.cpu_percent(None):.0f}% (app {self.proc.cpu_percent(None) / psutil.cpu_count():.0f}%)"
+                           f"   ·   RAM {self.proc.memory_info().rss / 2**20:.0f} MB")
             except Exception:
                 pass
         if self.engine and self.engine.stats.running:
             s = self.engine.stats
-            self._meter(self.in_meter, s.input_db)
-            self._meter(self.out_meter, s.output_db)
+            self.in_meter.set_db(s.input_db)
+            self.out_meter.set_db(s.output_db)
             rec = self.engine.recorder
             if rec is not None:
-                self.rec_btn.configure(text=f"■ Stop recording ({rec.seconds:.0f} s)")
-            self.stats_lbl.configure(text=(
-                f"processing {s.proc_ms_avg:5.1f} ms (max {s.proc_ms_max:.1f})  RTF {s.rtf:.2f}  "
-                f"latency ~{s.est_latency_ms:.0f} ms + device {s.extra.get('device_latency_ms', {})}\n"
-                f"dropped {s.dropped_blocks}  underruns {s.underruns}  errors {s.processing_errors}  {sys_txt}"))
+                self.rec_btn.configure(text=f"■  Stop recording ({rec.seconds:.0f} s)")
+            dev = s.extra.get("device_latency_ms") or {}
+            dev_txt = f" + device (in {dev['input']:.0f} / out {dev['output']:.0f} ms)" if dev else ""
+            text = (f"Processing {s.proc_ms_avg:.1f} ms (max {s.proc_ms_max:.1f})   ·   RTF {s.rtf:.2f}   ·   "
+                    f"Latency ~{s.est_latency_ms:.0f} ms{dev_txt}\n"
+                    f"Dropped {s.dropped_blocks}   ·   Underruns {s.underruns}   ·   Errors {s.processing_errors}"
+                    f"   ·   {sys_txt}")
         else:
-            self._meter(self.in_meter, -120)
-            self._meter(self.out_meter, -120)
-            self.stats_lbl.configure(text=sys_txt)
+            self.in_meter.set_db(-120)
+            self.out_meter.set_db(-120)
+            text = sys_txt
+        if text != self._stats_text:
+            self._stats_text = text
+            self.stats_lbl.configure(text=text)
         self.root.after(200, self._poll)
 
     def on_close(self):
@@ -567,13 +726,7 @@ def main():
                         handlers=[RotatingFileHandler(paths.LOGS_DIR / "rtvc.log", maxBytes=2_000_000,
                                                       backupCount=3, encoding="utf-8"), logging.StreamHandler()])
     logger.info("Starting Parroty %s", __version__)
-    try:
-        from ctypes import windll
-
-        windll.shcore.SetProcessDpiAwareness(1)
-    except Exception:
-        pass
-    root = tk.Tk()
+    root = ctk.CTk()            # CustomTkinter enables per-monitor DPI awareness itself
     try:
         App(root)
     except Exception as e:
