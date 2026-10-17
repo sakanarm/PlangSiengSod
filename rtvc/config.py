@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 BACKENDS = ("auto", "onnx-dml", "onnx-cpu", "torch-cpu")
 F0_METHODS = ("rmvpe", "pm")
 SAMPLE_RATES = (44100, 48000)
-# robot = DSP effect (no model), passthrough = routing test, rvc = AI conversion (optional add-on)
-MODES = ("robot", "passthrough", "rvc")
+# robot / voice = DSP effects (no model), passthrough = routing test, rvc = AI conversion (optional add-on)
+MODES = ("robot", "voice", "passthrough", "rvc")
 
 # Hard limits. The pitch cache in the converter holds 1024 frames of 10 ms, so the
 # whole analysis window (extra + crossfade + block) must stay well below 10.24 s.
@@ -32,6 +32,8 @@ LIMITS = {
     "robot_pitch_hz": (40.0, 400.0),
     "ring_mod_hz": (0.0, 200.0),
     "ring_mix": (0.0, 1.0),
+    "voice_pitch_st": (-12.0, 12.0),
+    "voice_formant_st": (-8.0, 8.0),
 }
 
 
@@ -49,6 +51,9 @@ class AppConfig:
     robot_pitch_hz: float = 110.0     # monotone pitch of the robot voice
     ring_mod_hz: float = 30.0         # 0 = off; adds a metallic wobble
     ring_mix: float = 0.3
+    voice: str = "deep_male"          # key in rtvc.audio.voices.VOICES (DSP voices, no model)
+    voice_pitch_st: float = -4.0      # semitones, adjustable per voice
+    voice_formant_st: float = -2.0    # semitones, + = smaller / younger sounding speaker
 
     model_path: str = ""
     index_path: str = ""
@@ -84,6 +89,10 @@ class AppConfig:
             errors.append(f"backend must be one of {BACKENDS}, got {self.backend!r}")
         if self.mode not in MODES:
             errors.append(f"mode must be one of {MODES}, got {self.mode!r}")
+        from .audio.voices import VOICES
+
+        if self.voice not in VOICES:
+            errors.append(f"voice must be one of {tuple(VOICES)}, got {self.voice!r}")
         if self.f0_method not in F0_METHODS:
             errors.append(f"f0_method must be one of {F0_METHODS}, got {self.f0_method!r}")
         if self.samplerate not in SAMPLE_RATES:

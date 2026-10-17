@@ -1,7 +1,8 @@
 """Block processors: take one block of mono float32 audio, return one block.
 
-The real-time engine only knows this interface, so the RVC converter, the DSP robot
-voice and the pass-through test are interchangeable.
+The real-time engine only knows this interface, so the RVC converter, the DSP voices
+and the pass-through test are interchangeable. Everything in this file is classic DSP
+(no AI model, no downloads) and runs on any CPU.
 """
 
 from __future__ import annotations
@@ -74,7 +75,9 @@ class RobotVoiceProcessor(BlockProcessor):
         self._in = np.zeros(0, dtype=np.float32)            # input not yet consumed by a frame
         self._hist = np.zeros(self.n - self.hop, dtype=np.float32)
         self._ola = np.zeros(self.n, dtype=np.float32)
-        self._out = np.zeros(self.n, dtype=np.float32)      # primes the fixed output delay
+        # One hop of priming always covers the samples still waiting for a full hop; with the
+        # (n - hop) history this gives a total delay of exactly n samples, for any block size.
+        self._out = np.zeros(self.hop, dtype=np.float32)
         self._phase = 0.0
 
     @property
@@ -111,3 +114,344 @@ class RobotVoiceProcessor(BlockProcessor):
             self._phase = float((t[-1] + 2 * np.pi * self.ring_mod_hz / self.sr) % (2 * np.pi))
             out = (1 - self.ring_mix) * out + self.ring_mix * out * np.sin(t).astype(np.float32)
         return np.clip(out * self.gain, -1.0, 1.0)
+
+
+# ============================================================================ STFT base
+class _StftProcessor(BlockProcessor):
+    """Streaming STFT -> per-frame spectral processing -> overlap-add.
+
+    Frame length ``n``, hop ``n/4`` with a periodic Hann window for analysis and
+    synthesis. Output is delayed by exactly ``n`` samples, so the result does not depend
+    on how the input is cut into blocks.
+    """
+
+    def __init__(self, samplerate: int, n: int):
+        self.sr = int(samplerate)
+        self.n = int(n)
+        self.hop = self.n // 4
+        self.window = np.hanning(self.n + 1)[:-1]           # periodic Hann, float64
+        self.norm = float(np.sum(self.window ** 2) / self.hop)
+        self.bins = np.arange(self.n // 2 + 1, dtype=np.float64)
+        self._reset_stream()
+
+    def _reset_stream(self):
+        self._in = np.zeros(0, dtype=np.float32)
+        self._hist = np.zeros(self.n - self.hop, dtype=np.float32)
+        self._ola = np.zeros(self.n, dtype=np.float64)
+        # One hop of priming always covers the samples still waiting for a full hop; with the
+        # (n - hop) history this gives a total delay of exactly n samples, for any block size.
+        self._out = np.zeros(self.hop, dtype=np.float32)
+
+    def reset(self):
+        self._reset_stream()
+
+    @property
+    def algorithmic_latency_s(self) -> float:
+        return self.n / self.sr
+
+    def _frame(self, frame: np.ndarray) -> np.ndarray:  # pragma: no cover - interface
+        """Windowed analysis/synthesis of one frame; return n samples (already windowed)."""
+        raise NotImplementedError
+
+    def process(self, block: np.ndarray) -> np.ndarray:
+        block = np.asarray(block, dtype=np.float32)
+        self._in = np.concatenate([self._in, block])
+        produced = []
+        while self._in.shape[0] >= self.hop:
+            hop_in = self._in[:self.hop]
+            self._in = self._in[self.hop:]
+            frame = np.concatenate([self._hist, hop_in])
+            self._hist = frame[self.hop:]
+            self._ola += self._frame(frame.astype(np.float64))
+            produced.append(self._ola[:self.hop].astype(np.float32))
+            self._ola = np.concatenate([self._ola[self.hop:], np.zeros(self.hop)])
+        if produced:
+            self._out = np.concatenate([self._out] + produced)
+        out = self._out[:block.shape[0]]
+        self._out = self._out[block.shape[0]:]
+        if out.shape[0] < block.shape[0]:
+            out = np.pad(out, (0, block.shape[0] - out.shape[0]))
+        return out
+
+
+def _envelope_log(logmag: np.ndarray, n: int, lifter: int) -> np.ndarray:
+    """Smooth log-spectral envelope (formants) by cepstral liftering."""
+    c = np.fft.irfft(logmag, n=n)
+    c[lifter:n - lifter + 1] = 0.0
+    return np.fft.rfft(c).real
+
+
+def _peak_envelope_log(logmag: np.ndarray, half_width: int, smooth_bins: int) -> np.ndarray:
+    """Log-spectral envelope through the dominant spectral peaks (harmonics), lightly smoothed.
+
+    A peak counts if it is the maximum within +-half_width bins, so window sidelobes in
+    the valleys between harmonics are skipped. Follows formants much more closely than a
+    cepstral envelope, whose estimate is dominated by those valleys. Beyond the first and
+    last peak the envelope stays flat.
+    """
+    h = half_width
+    local_max = np.lib.stride_tricks.sliding_window_view(np.pad(logmag, h, mode="edge"), 2 * h + 1).max(axis=1)
+    pk = np.flatnonzero(logmag >= local_max)
+    e = np.interp(np.arange(logmag.size), pk, logmag[pk])
+    k = smooth_bins
+    return np.convolve(np.pad(e, k // 2, mode="edge"), np.ones(k) / k, mode="valid")
+
+
+# ============================================================================ voices
+class VoiceShiftProcessor(_StftProcessor):
+    """Independent pitch and formant shift ("different person" voices) - DSP, NOT AI.
+
+    Phase-vocoder pitch shift with identity phase locking. Each frame is split into a
+    spectral envelope (a line through the harmonic peaks: the vocal tract / formants) and the
+    excitation (the harmonics: the pitch). The excitation is resampled by the pitch
+    ratio and the envelope by the formant ratio, so pitch and "size of the speaker"
+    change separately. Optional vibrato modulates the pitch (used by the Alien voice).
+    Rhythm, accent and the shape of the intonation stay the speaker's own.
+    """
+
+    name = "Voice shift (pitch + formant, DSP)"
+
+    def __init__(self, samplerate: int, pitch_st: float = 0.0, formant_st: float = 0.0,
+                 vibrato_st: float = 0.0, vibrato_hz: float = 0.0):
+        super().__init__(samplerate, 2048)                  # ~43 ms at 48 kHz: resolves male harmonics
+        self.peak_half_width = max(1, int(round(50.0 * self.n / self.sr)))   # peaks dominate +-50 Hz
+        self.smooth_bins = int(round(150.0 * self.n / self.sr)) | 1          # ~150 Hz envelope smoothing
+        self.expected = 2 * np.pi * self.hop * self.bins / self.n
+        self.pitch_st = float(pitch_st)                     # may be changed live
+        self.formant_st = float(formant_st)                 # may be changed live
+        self.vibrato_st = float(vibrato_st)
+        self.vibrato_hz = float(vibrato_hz)
+        self.reset()
+
+    def reset(self):
+        self._reset_stream()
+        self._prev_ph = np.zeros(self.bins.size)
+        self._syn_ph = np.zeros(self.bins.size)
+        self._lfo = 0.0
+
+    def _frame(self, frame):
+        X = np.fft.rfft(frame * self.window)
+        mag = np.abs(X)
+        ph = np.angle(X)
+        dphi = ph - self._prev_ph - self.expected
+        dphi -= 2 * np.pi * np.round(dphi / (2 * np.pi))
+        advance = self.expected + dphi                      # true phase advance per hop
+        self._prev_ph = ph
+
+        st = self.pitch_st
+        if self.vibrato_st and self.vibrato_hz:
+            st += self.vibrato_st * np.sin(self._lfo)
+            self._lfo = (self._lfo + 2 * np.pi * self.vibrato_hz * self.hop / self.sr) % (2 * np.pi)
+        if mag.max() < 1e-7:                                # silence: output zero, keep phases sane
+            self._syn_ph = ph
+            return np.zeros(self.n)
+        r = 2.0 ** (st / 12)
+        f = 2.0 ** (self.formant_st / 12)
+        logmag = np.log(mag + 1e-9)
+        env_log = _peak_envelope_log(logmag, self.peak_half_width, self.smooth_bins)
+        exc = np.exp(np.minimum(logmag - env_log, np.log(2.0)))      # flat (~1) at the harmonics
+
+        peaks = np.flatnonzero((mag[1:-1] > mag[:-2]) & (mag[1:-1] >= mag[2:])) + 1
+        if abs(r - 1.0) < 1e-6 or peaks.size == 0:          # no pitch change: keep the original phases
+            new_exc, phase = exc, ph
+        else:
+            # Peak shifting (Laroche & Dolson): every bin belongs to its nearest spectral peak;
+            # each peak region moves as a whole so the window lobe keeps its shape, and the
+            # peak's phase is propagated at the new frequency (identity phase locking).
+            region = np.searchsorted((peaks[:-1] + peaks[1:]) / 2.0, self.bins)
+            target_peak = np.rint(peaks * r).astype(int)
+            target = self.bins.astype(int) + (target_peak - peaks)[region]
+            tp = np.minimum(target_peak, self.bins.size - 1)
+            rot = np.exp(1j * (self._syn_ph[tp] + advance[peaks] * r - ph[peaks]))
+            ok = (target >= 0) & (target < self.bins.size)
+            Z = np.zeros(self.bins.size, dtype=np.complex128)
+            np.add.at(Z, target[ok], (exc * np.exp(1j * ph) * rot[region])[ok])
+            new_exc, phase = np.abs(Z), np.angle(Z)
+        new_env_log = np.interp(self.bins / f, self.bins, env_log) if abs(f - 1.0) > 1e-6 else env_log
+        self._syn_ph = np.mod(phase, 2 * np.pi)
+        new_mag = new_exc * np.exp(new_env_log)
+        # Keep the frame energy: resampling/warping otherwise makes shifted voices quieter.
+        new_mag *= np.clip(np.sqrt(np.sum(mag ** 2) / max(np.sum(new_mag ** 2), 1e-18)), 0.25, 4.0)
+        Y = new_mag * np.exp(1j * phase)
+        return np.fft.irfft(Y, n=self.n) * self.window / self.norm
+
+
+class WhisperProcessor(_StftProcessor):
+    """Whisper / ghost: keeps only the formant envelope and replaces the voice with noise.
+
+    No pitch or harmonics of the speaker survive; only the words (spectral envelope).
+    """
+
+    name = "Whisper (DSP)"
+
+    def __init__(self, samplerate: int, breath_db: float = 6.0, seed: int = 1234):
+        super().__init__(samplerate, 1024)
+        self.lifter = max(8, int(self.sr * 0.0012))
+        self.seed = int(seed)
+        freqs = self.bins * self.sr / self.n
+        # breathy tilt: up to +breath_db above ~2 kHz, and no rumble below 150 Hz
+        self.tilt = (10 ** (breath_db / 20 * np.clip((freqs - 1000) / 2000, 0, 1))
+                     * np.clip((freqs - 80) / 120, 0, 1))
+        self.reset()
+
+    def reset(self):
+        self._reset_stream()
+        self._rng = np.random.default_rng(self.seed)
+
+    def _frame(self, frame):
+        mag = np.abs(np.fft.rfft(frame * self.window))
+        phase = self._rng.uniform(-np.pi, np.pi, self.bins.size)
+        if mag.max() < 1e-7:
+            return np.zeros(self.n)
+        env = np.exp(_envelope_log(np.log(mag + 1e-9), self.n, self.lifter))
+        # The envelope of a harmonic voice is lower than its peaks; rescale to keep the loudness.
+        env *= np.sqrt(np.sum(mag ** 2) / max(np.sum(env ** 2), 1e-18))
+        Y = env * self.tilt * np.exp(1j * phase)
+        return np.fft.irfft(Y, n=self.n) * self.window / self.norm
+
+
+class RadioProcessor(_StftProcessor):
+    """Walkie-talkie / radio: narrow band-pass plus mild saturation."""
+
+    name = "Radio (DSP)"
+
+    def __init__(self, samplerate: int, low_hz: float = 400.0, high_hz: float = 3000.0, drive: float = 4.0):
+        super().__init__(samplerate, 1024)
+        freqs = self.bins * self.sr / self.n
+        lo = np.clip((freqs - low_hz * 0.6) / (low_hz * 0.4), 0, 1)
+        hi = np.clip((high_hz * 1.4 - freqs) / (high_hz * 0.4), 0, 1)
+        self.mask = (lo * hi) ** 2
+        self.drive = float(drive)
+
+    def _frame(self, frame):
+        Y = np.fft.rfft(frame * self.window) * self.mask
+        return np.fft.irfft(Y, n=self.n) * self.window / self.norm
+
+    def process(self, block):
+        y = super().process(block)
+        return (np.tanh(self.drive * y) / np.tanh(self.drive) * 0.7).astype(np.float32)
+
+
+class DistortionProcessor(BlockProcessor):
+    """Soft-clipping saturation (stateless)."""
+
+    name = "Distortion"
+
+    def __init__(self, drive: float = 3.0, mix: float = 0.4):
+        self.drive = float(drive)
+        self.mix = float(np.clip(mix, 0.0, 1.0))
+
+    def process(self, block):
+        wet = np.tanh(self.drive * block) / np.tanh(self.drive)
+        return ((1 - self.mix) * block + self.mix * wet).astype(np.float32)
+
+
+class RingModProcessor(BlockProcessor):
+    """Ring modulation with a continuous oscillator phase (metallic / sci-fi tone)."""
+
+    name = "Ring modulation"
+
+    def __init__(self, samplerate: int, freq_hz: float = 60.0, mix: float = 0.3):
+        self.sr = int(samplerate)
+        self.freq = float(freq_hz)
+        self.mix = float(np.clip(mix, 0.0, 1.0))
+        self.reset()
+
+    def reset(self):
+        self._phase = 0.0
+
+    def process(self, block):
+        t = self._phase + 2 * np.pi * self.freq * np.arange(block.shape[0]) / self.sr
+        self._phase = float((self._phase + 2 * np.pi * self.freq * block.shape[0] / self.sr) % (2 * np.pi))
+        return ((1 - self.mix) * block + self.mix * block * np.sin(t)).astype(np.float32)
+
+
+class ReverbProcessor(BlockProcessor):
+    """Cave / hall reverb: uniformly partitioned FFT convolution with a synthetic room.
+
+    The impulse response is generated here (decaying filtered noise plus a few early
+    reflections), so nothing is downloaded. Latency is one partition (~21 ms at 48 kHz).
+    """
+
+    name = "Reverb"
+
+    def __init__(self, samplerate: int, rt60_s: float = 2.2, wet: float = 0.5, dry: float = 0.8,
+                 seed: int = 7, partition: int = 1024):
+        self.sr = int(samplerate)
+        self.P = int(partition)
+        self.wet, self.dry = float(wet), float(dry)
+        self.ir = self._make_ir(rt60_s, seed)
+        k = -(-self.ir.size // self.P)
+        padded = np.zeros(k * self.P)
+        padded[:self.ir.size] = self.ir
+        parts = padded.reshape(k, self.P)
+        self.H = np.fft.rfft(np.concatenate([parts, np.zeros_like(parts)], axis=1), axis=1)
+        self.reset()
+
+    def _make_ir(self, rt60, seed):
+        rng = np.random.default_rng(seed)
+        n = int(self.sr * rt60)
+        t = np.arange(n) / self.sr
+        noise = rng.standard_normal(n)
+        spec = np.fft.rfft(noise)
+        f = np.fft.rfftfreq(n, 1 / self.sr)
+        spec *= 1.0 / (1.0 + (f / 3500.0) ** 2) * np.clip(f / 150.0, 0, 1)     # darker, no rumble
+        ir = np.fft.irfft(spec, n=n) * 10 ** (-3 * t / rt60)                      # 60 dB decay at rt60
+        ir *= np.clip(t / 0.02, 0, 1)                                             # pre-delay fade-in
+        for delay_s, gain in ((0.011, 0.6), (0.023, 0.45), (0.037, 0.35), (0.051, 0.3)):
+            ir[int(delay_s * self.sr)] += gain * np.max(np.abs(ir))               # early reflections
+        return ir / np.sqrt(np.sum(ir ** 2))                                      # unit energy
+
+    def reset(self):
+        self._fdl = np.zeros_like(self.H)                   # frequency-domain delay line
+        self._prev = np.zeros(self.P)
+        self._in = np.zeros(0, dtype=np.float32)
+        self._out = np.zeros(self.P, dtype=np.float32)      # primes the one-partition delay
+
+    @property
+    def algorithmic_latency_s(self) -> float:
+        return self.P / self.sr
+
+    def process(self, block):
+        block = np.asarray(block, dtype=np.float32)
+        self._in = np.concatenate([self._in, block])
+        produced = []
+        while self._in.shape[0] >= self.P:
+            x = self._in[:self.P].astype(np.float64)
+            self._in = self._in[self.P:]
+            self._fdl = np.roll(self._fdl, 1, axis=0)
+            self._fdl[0] = np.fft.rfft(np.concatenate([self._prev, x]))
+            self._prev = x
+            wet = np.fft.irfft(np.sum(self._fdl * self.H, axis=0), n=2 * self.P)[self.P:]
+            produced.append((self.dry * x + self.wet * wet).astype(np.float32))
+        if produced:
+            self._out = np.concatenate([self._out] + produced)
+        out = self._out[:block.shape[0]]
+        self._out = self._out[block.shape[0]:]
+        if out.shape[0] < block.shape[0]:
+            out = np.pad(out, (0, block.shape[0] - out.shape[0]))
+        return out
+
+
+class ChainProcessor(BlockProcessor):
+    """Runs processors in series; exposes the first VoiceShiftProcessor as ``shift``."""
+
+    def __init__(self, name: str, stages: list[BlockProcessor], gain_db: float = 0.0):
+        self.name = name
+        self.stages = list(stages)
+        self.gain = float(10 ** (gain_db / 20))
+        self.shift = next((s for s in self.stages if isinstance(s, VoiceShiftProcessor)), None)
+
+    def reset(self):
+        for s in self.stages:
+            s.reset()
+
+    @property
+    def algorithmic_latency_s(self) -> float:
+        return sum(s.algorithmic_latency_s for s in self.stages)
+
+    def process(self, block):
+        y = np.asarray(block, dtype=np.float32)
+        for s in self.stages:
+            y = s.process(y)
+        return np.clip(y * self.gain, -1.0, 1.0).astype(np.float32)

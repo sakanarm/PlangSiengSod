@@ -13,7 +13,8 @@ from tkinter import filedialog, messagebox, ttk
 from .. import __version__, paths
 from ..audio import devices as dv
 from ..audio.engine import AudioEngine, play_test_tone
-from ..audio.processors import PassthroughProcessor, RobotVoiceProcessor
+from ..audio.processors import ChainProcessor, PassthroughProcessor, RobotVoiceProcessor
+from ..audio.voices import VOICES, key_for_label, make_voice
 from ..config import AppConfig
 
 logger = logging.getLogger(__name__)
@@ -92,20 +93,40 @@ class App:
         self.mode = tk.StringVar(value=self.cfg.mode if self.cfg.mode != "rvc" or self.ai_available else "robot")
         ttk.Radiobutton(mode, text="Robot voice v1  (DSP effect, no AI model)", value="robot",
                         variable=self.mode, command=self._mode_changed).grid(row=0, column=0, sticky="w")
-        ttk.Radiobutton(mode, text="Pass-through  (no change - routing test)", value="passthrough",
+        ttk.Radiobutton(mode, text="Other voices / เสียงอื่น  (DSP effect, no AI model)", value="voice",
                         variable=self.mode, command=self._mode_changed).grid(row=1, column=0, sticky="w")
+        ttk.Radiobutton(mode, text="Pass-through  (no change - routing test)", value="passthrough",
+                        variable=self.mode, command=self._mode_changed).grid(row=2, column=0, sticky="w")
         rvc = ttk.Radiobutton(mode, text="AI voice (RVC model)" + ("" if self.ai_available else
                               "  - add-on not installed (setup.ps1 -WithAI)"), value="rvc",
                               variable=self.mode, command=self._mode_changed)
-        rvc.grid(row=2, column=0, sticky="w")
+        rvc.grid(row=3, column=0, sticky="nw")
         rvc.state(["disabled"])  # RVC streaming UI arrives with the AI add-on milestone
+        mode.columnconfigure(1, weight=1)
 
         self.robot_frame = ttk.Frame(mode)
-        self.robot_frame.grid(row=0, column=1, rowspan=3, sticky="e", padx=(30, 0))
+        self.robot_frame.grid(row=0, column=1, rowspan=4, sticky="ne", padx=(30, 0))
         self.robot_pitch = self._slider(self.robot_frame, 0, "Robot pitch (Hz)", 40, 400, self.cfg.robot_pitch_hz, 0)
         self.ring_hz = self._slider(self.robot_frame, 1, "Metallic wobble (Hz, 0=off)", 0, 200, self.cfg.ring_mod_hz, 0)
         self.ring_mix = self._slider(self.robot_frame, 2, "Wobble amount", 0, 1, self.cfg.ring_mix, 2)
         for v in (self.robot_pitch, self.ring_hz, self.ring_mix):
+            v.trace_add("write", lambda *_: self._live_update())
+
+        self.voice_frame = ttk.Frame(mode)
+        self.voice_frame.grid(row=0, column=1, rowspan=4, sticky="ne", padx=(30, 0))
+        ttk.Label(self.voice_frame, text="Voice / เสียง").grid(row=0, column=0, sticky="w")
+        voice = VOICES.get(self.cfg.voice) or next(iter(VOICES.values()))
+        self.voice_var = tk.StringVar(value=voice.label)
+        self.voice_cb = ttk.Combobox(self.voice_frame, textvariable=self.voice_var, state="readonly", width=30,
+                                     values=[v.label for v in VOICES.values()], height=len(VOICES))
+        self.voice_cb.grid(row=0, column=1, columnspan=2, sticky="w", padx=6, pady=(0, 4))
+        self.voice_cb.bind("<<ComboboxSelected>>", lambda e: self._voice_selected())
+        self.voice_pitch = self._slider(self.voice_frame, 1, "Pitch (semitones)", -12, 12, self.cfg.voice_pitch_st, 1)
+        self.voice_formant = self._slider(self.voice_frame, 2, "Formant / voice size", -8, 8,
+                                          self.cfg.voice_formant_st, 1)
+        self.voice_desc = ttk.Label(self.voice_frame, text="", foreground="#555", wraplength=330)
+        self.voice_desc.grid(row=3, column=0, columnspan=3, sticky="w", pady=(2, 0))
+        for v in (self.voice_pitch, self.voice_formant):
             v.trace_add("write", lambda *_: self._live_update())
 
         # ---- devices
@@ -210,17 +231,59 @@ class App:
         self.state_detail.configure(text=detail)
 
     def _mode_changed(self):
-        on = self.mode.get() == "robot"
+        m = self.mode.get()
+        if m == "voice":
+            self.robot_frame.grid_remove()
+            self.voice_frame.grid()
+        else:
+            self.voice_frame.grid_remove()
+            self.robot_frame.grid()
+        on = m == "robot"
         for w in self.robot_frame.winfo_children():
             if isinstance(w, ttk.Scale):
                 w.state(["!disabled"] if on else ["disabled"])
+        self._voice_widgets()
+        self._swap_processor()
+
+    def _voice_widgets(self):
+        v = VOICES[key_for_label(self.voice_var.get())]
+        self.voice_desc.configure(text=v.description + ("" if v.adjustable else "  (no pitch/formant controls)"))
+        for w in self.voice_frame.winfo_children():
+            if isinstance(w, ttk.Scale):
+                w.state(["!disabled"] if v.adjustable else ["disabled"])
+
+    def _voice_selected(self):
+        """A newly selected voice starts from its own default pitch/formant."""
+        v = VOICES[key_for_label(self.voice_var.get())]
+        self.voice_pitch.set(v.pitch_st)
+        self.voice_formant.set(v.formant_st)
+        self._voice_widgets()
+        self._swap_processor()
+
+    def _swap_processor(self):
+        """While running, switching mode or voice takes effect immediately (new DSP chain)."""
+        if not (self.engine and self.engine.stats.running) or self.mode.get() not in ("robot", "voice", "passthrough"):
+            return
+        try:
+            proc = self._make_processor(self._collect_cfg())
+        except Exception as e:
+            self.log(f"Could not switch voice: {e}", logging.ERROR)
+            return
+        self.engine.processor = proc        # the worker thread uses it from the next block on
+        self.set_state("Processing", proc.name)
+        self.log(f"Voice switched to: {proc.name}")
 
     def _live_update(self):
-        """Robot sliders apply immediately while running (only cheap parameters)."""
-        if self.engine and self.engine.stats.running and isinstance(self.engine.processor, RobotVoiceProcessor):
-            p = self.engine.processor
+        """Sliders apply immediately while running (only cheap parameters)."""
+        if not (self.engine and self.engine.stats.running):
+            return
+        p = self.engine.processor
+        if isinstance(p, RobotVoiceProcessor):
             p.ring_mod_hz = float(self.ring_hz.get())
             p.ring_mix = float(self.ring_mix.get())
+        elif isinstance(p, ChainProcessor) and p.shift is not None:
+            p.shift.pitch_st = float(self.voice_pitch.get())
+            p.shift.formant_st = float(self.voice_formant.get())
 
     def _collect_cfg(self) -> AppConfig:
         c = self.cfg
@@ -230,6 +293,9 @@ class App:
         c.robot_pitch_hz = round(float(self.robot_pitch.get()), 1)
         c.ring_mod_hz = round(float(self.ring_hz.get()), 1)
         c.ring_mix = round(float(self.ring_mix.get()), 2)
+        c.voice = key_for_label(self.voice_var.get())
+        c.voice_pitch_st = round(float(self.voice_pitch.get()), 1)
+        c.voice_formant_st = round(float(self.voice_formant.get()), 1)
         c.output_gain_db = round(float(self.gain.get()), 1)
         c.input_gate_db = round(float(self.gate.get()), 1)
         return c
@@ -315,6 +381,8 @@ class App:
     def _make_processor(self, c: AppConfig):
         if c.mode == "robot":
             return RobotVoiceProcessor(c.samplerate, c.robot_pitch_hz, c.ring_mod_hz, c.ring_mix)
+        if c.mode == "voice":
+            return make_voice(c.voice, c.samplerate, c.voice_pitch_st, c.voice_formant_st)
         if c.mode == "passthrough":
             return PassthroughProcessor()
         raise RuntimeError("AI voice mode is not available in this build.")

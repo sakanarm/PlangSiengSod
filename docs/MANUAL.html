@@ -105,18 +105,18 @@
 
 <section id="what">
   <h2>1. โปรแกรมนี้ทำอะไร</h2>
-  <p>โปรแกรมรับเสียงจากไมค์ แปลงเป็นเสียงหุ่นยนต์ทันทีขณะที่คุณพูด แล้วส่งต่อไปยังสายเสียงเสมือน
+  <p>โปรแกรมรับเสียงจากไมค์ แปลงเป็นเสียงอื่นทันทีขณะที่คุณพูด (เสียงหุ่นยนต์ เสียงคนแบบอื่น หรือเอฟเฟกต์) แล้วส่งต่อไปยังสายเสียงเสมือน
     <b>VB-CABLE</b> ซึ่ง Teams จะมองเห็นเป็นไมโครโฟนตัวหนึ่ง</p>
   <div class="flow" role="img" aria-label="ไมค์จริง ไปยังโปรแกรมนี้ ไปยัง CABLE Input ไปยัง CABLE Output ไปยัง Teams">
     <span class="box">ไมค์จริง</span><span class="arrow">→</span>
-    <span class="box hl">โปรแกรมนี้ (เสียง robot)</span><span class="arrow">→</span>
+    <span class="box hl">โปรแกรมนี้ (แปลงเสียง)</span><span class="arrow">→</span>
     <span class="box">CABLE Input</span><span class="arrow">⇒ VB-CABLE ⇒</span>
     <span class="box">CABLE Output</span><span class="arrow">→</span>
     <span class="box">Teams</span>
   </div>
   <ul>
     <li><b>เป็นแบบ real time</b> ไม่ต้องอัดเป็นไฟล์ก่อน ความหน่วงรวมประมาณ ¼ วินาที (ค่าจริงของเครื่องคุณดูได้ในโปรแกรม)</li>
-    <li><b>เสียง robot v1 เป็นเอฟเฟกต์เสียง (DSP) ไม่ได้ใช้ AI</b> จึงไม่ต้องโหลดโมเดลและไม่ต้องใช้การ์ดจอ</li>
+    <li><b>เสียงทุกแบบในเวอร์ชันนี้เป็นเอฟเฟกต์เสียง (DSP) ไม่ได้ใช้ AI</b> จึงไม่ต้องโหลดโมเดลและไม่ต้องใช้การ์ดจอ (Robot voice และ Other voices อีก 12 แบบ ดู<a href="#voices">หัวข้อ 5</a>)</li>
     <li>โหมดเสียง AI (RVC) ยังอยู่ระหว่างพัฒนา เลยกดเลือกในโปรแกรมไม่ได้</li>
   </ul>
   <div class="warn">ใช้อย่างโปร่งใส: บอกผู้ร่วมประชุมว่าคุณกำลังใช้เอฟเฟกต์เปลี่ยนเสียง
@@ -156,7 +156,7 @@
     <li><b>Microphone (input)</b> เลือกไมค์จริงของคุณ</li>
     <li>กด <span class="btn">Use VB-CABLE</span> ช่อง <b>Output → Teams</b> จะเปลี่ยนเป็น
       <code>CABLE Input (VB-Audio Virtual Cable)</code> ให้เอง</li>
-    <li>เลือก <b>Robot voice v1</b> แล้วกด <span class="btn">Start</span> สถานะจะเปลี่ยนเป็น
+    <li>เลือก <b>Robot voice v1</b> หรือ <b>Other voices / เสียงอื่น</b> (แล้วเลือกเสียงในช่อง Voice / เสียง) แล้วกด <span class="btn">Start</span> สถานะจะเปลี่ยนเป็น
       <span style="color:var(--blue);font-weight:600">Processing</span> สีน้ำเงิน</li>
     <li>ใน Teams ไปที่ Settings → Devices → Microphone แล้วเลือก <b>CABLE Output (VB-Audio Virtual Cable)</b></li>
     <li>บอกผู้ร่วมประชุมว่ากำลังใช้เอฟเฟกต์เสียง</li>
@@ -180,6 +180,7 @@
   <div class="table-wrap"><table>
     <tr><th>ตัวเลือก</th><th>ทำอะไร</th></tr>
     <tr><td>Robot voice v1</td><td>เสียงหุ่นยนต์ ระดับเสียงคงที่ตามค่า Robot pitch</td></tr>
+    <tr><td>Other voices / เสียงอื่น</td><td>เปลี่ยนเป็นเสียงคนแบบอื่น หรือเอฟเฟกต์ 12 แบบ (ดูตารางด้านล่าง)</td></tr>
     <tr><td>Pass-through</td><td>ส่งเสียงจริงผ่านไปโดยไม่แปลง ใช้ทดสอบว่าเส้นทางเสียงถึง Teams</td></tr>
     <tr><td>AI voice (RVC model)</td><td>ยังใช้ไม่ได้ในเวอร์ชันนี้</td></tr>
   </table></div>
@@ -191,12 +192,45 @@
     <tr><td>Wobble amount</td><td>0–1 (0.30)</td><td>ความแรงของเสียงสั่น</td><td>ทันที</td></tr>
   </table></div>
 
+  <h3 id="voices">เสียงอื่น (Other voices)</h3>
+  <p>เลือกโหมด <b>Other voices / เสียงอื่น</b> แล้วเลือกเสียงจากช่อง <b>Voice / เสียง</b> ด้านขวา
+    เปลี่ยนเสียงได้ทันทีแม้กำลังทำงานอยู่ ไม่ต้องกด Stop (เสียงอาจสะดุดสั้นๆ ตอนสลับ)</p>
+  <div class="table-wrap"><table>
+    <tr><th>เสียง</th><th>Pitch</th><th>Formant</th><th>ลักษณะ</th></tr>
+    <tr><td>ชายเสียงทุ้ม (Deep male)</td><td>−4</td><td>−2</td><td>เสียงต่ำลง ตัวใหญ่ขึ้น (ค่าเริ่มต้น)</td></tr>
+    <tr><td>ชายร่างใหญ่ (Big man)</td><td>−6</td><td>−3.5</td><td>ต่ำมาก หนัก</td></tr>
+    <tr><td>ชายหนุ่ม (Young male)</td><td>+3</td><td>+1</td><td>สูงขึ้นเล็กน้อย เบาขึ้น</td></tr>
+    <tr><td>ผู้หญิง (Female)</td><td>+8</td><td>+3</td><td>ช่วงเสียงผู้หญิง ถ้าเสียงจริงเป็นผู้ชายทั่วไป</td></tr>
+    <tr><td>ผู้หญิงเสียงนุ่ม (Soft female)</td><td>+6</td><td>+2.5</td><td>ผู้หญิงเสียงต่ำกว่า นุ่มกว่า</td></tr>
+    <tr><td>เด็ก (Child)</td><td>+11</td><td>+4.5</td><td>เสียงสูง ตัวเล็ก</td></tr>
+    <tr><td>ชิปมังก์ / การ์ตูน (Chipmunk)</td><td>+12</td><td>+8</td><td>เสียงการ์ตูน</td></tr>
+    <tr><td>ยักษ์ / มอนสเตอร์ (Monster)</td><td>−7</td><td>−5</td><td>ต่ำมาก มีเสียงแตกพร่า</td></tr>
+    <tr><td>วิทยุสื่อสาร (Radio)</td><td>0</td><td>0</td><td>เสียงแคบเหมือนวอล์กี้ทอล์กี้</td></tr>
+    <tr><td>กระซิบ / ผี (Whisper)</td><td>—</td><td>—</td><td>ตัดระดับเสียง (pitch) ออกทั้งหมด เหลือเสียงลมหายใจตามคำพูด มี echo เล็กน้อย ปรับแถบไม่ได้</td></tr>
+    <tr><td>ถ้ำ / ห้องโถง (Cave)</td><td>0</td><td>0</td><td>เสียงก้องเหมือนอยู่ในห้องใหญ่</td></tr>
+    <tr><td>เอเลี่ยน (Alien)</td><td>+3</td><td>+3</td><td>เสียงสั่นขึ้นลง (vibrato) และเสียงโลหะ</td></tr>
+  </table></div>
+  <p>แถบปรับ (มีผลทันที ปรับต่อจากค่าของเสียงที่เลือก เลือกเสียงใหม่จะรีเซ็ตแถบเป็นค่าของเสียงนั้น):</p>
+  <div class="table-wrap"><table>
+    <tr><th>แถบ</th><th>ช่วงค่า</th><th>ผล</th></tr>
+    <tr><td>Pitch (semitones)</td><td>−12 ถึง +12</td><td>ระดับเสียง ทีละครึ่งเสียง (+12 = สูงขึ้น 1 อ็อกเทฟ)</td></tr>
+    <tr><td>Formant / voice size</td><td>−8 ถึง +8</td><td>ขนาดของ "ตัวคน" ที่ได้ยิน ค่าลบ = ตัวใหญ่ เสียงทุ้มหนา ค่าบวก = ตัวเล็ก ไม่เปลี่ยนระดับเสียง</td></tr>
+  </table></div>
+  <div class="note"><b>ข้อจำกัดที่ควรรู้:</b> เสียงเหล่านี้เป็นเอฟเฟกต์ DSP ไม่ใช่ AI
+    จังหวะการพูด สำเนียง และทำนองเสียงขึ้นลงของคุณยังอยู่เหมือนเดิม คนที่รู้จักเสียงคุณดีอาจยังจำได้
+    เสียงที่ปิดเสียงเดิมได้มากที่สุดคือ <b>กระซิบ / ผี</b> เพราะตัดระดับเสียงออกทั้งหมด
+    เสียงที่เลื่อน pitch มากๆ (เด็ก ชิปมังก์) จะฟังออกว่าผ่านเอฟเฟกต์</div>
+  <div class="note"><b>ความหน่วง:</b> โหมดนี้หน่วงในตัวประมาณ 43 ms (วิทยุและถ้ำประมาณ 64 ms)
+    เมื่อรวมบัฟเฟอร์และอุปกรณ์แล้ว ดูค่าจริงได้ที่ <i>latency ~… ms + device</i> ขณะทำงาน</div>
+  <div class="warn">ใช้อย่างโปร่งใส: บอกผู้ร่วมประชุมว่าคุณกำลังใช้เอฟเฟกต์เปลี่ยนเสียง
+    อย่าใช้เพื่อปลอมเป็นคนอื่น หรือทำให้คนอื่นเข้าใจผิดว่าใครเป็นคนพูด</div>
+
   <h3>กรอบ Audio routing (เส้นทางเสียง)</h3>
   <div class="table-wrap"><table>
     <tr><th>ช่อง / ปุ่ม</th><th>ใช้ทำอะไร</th></tr>
     <tr><td>Microphone (input)</td><td>ไมค์จริง <b>ห้ามเลือก CABLE Output</b> เพราะจะเกิดเสียงวนกลับ (feedback) และโปรแกรมจะไม่ยอมให้เริ่ม</td></tr>
     <tr><td>Output → Teams</td><td>เลือก <code>CABLE Input (VB-Audio Virtual Cable)</code> (อย่าเลือกตัวที่มีคำว่า 16ch)</td></tr>
-    <tr><td>Monitor (headphones)</td><td>ถ้าอยากได้ยินเสียง robot ของตัวเอง ให้เลือกหูฟัง ถ้าใช้ลำโพงจะเกิดเสียงสะท้อน ไม่ใช้ให้ตั้งเป็น <code>(off)</code></td></tr>
+    <tr><td>Monitor (headphones)</td><td>ถ้าอยากได้ยินเสียงที่แปลงแล้วของตัวเอง ให้เลือกหูฟัง ถ้าใช้ลำโพงจะเกิดเสียงสะท้อน ไม่ใช้ให้ตั้งเป็น <code>(off)</code></td></tr>
     <tr><td><span class="btn">Refresh devices</span></td><td>โหลดรายการอุปกรณ์ใหม่ เช่น หลังเสียบไมค์หรือหูฟัง (ต้องกด Stop ก่อน)</td></tr>
     <tr><td><span class="btn">Use VB-CABLE</span></td><td>ตั้ง Output เป็น CABLE Input ให้อัตโนมัติ</td></tr>
     <tr><td><span class="btn">Test beep → output</span></td><td>เล่นเสียงบี๊บไปที่ output ถ้าเป็น CABLE Input แถบระดับเสียงของ CABLE Output ใน Windows Sound settings หรือใน Teams ควรขยับ</td></tr>
@@ -240,7 +274,7 @@
     <li>ใน Teams กด <b>…</b> (Settings and more) → <b>Settings</b> → <b>Devices</b></li>
     <li><b>Microphone</b>: เลือก <code>CABLE Output (VB-Audio Virtual Cable)</code></li>
     <li><b>Speaker</b>: เลือกหูฟังหรือลำโพงตามปกติ <b>ห้ามเลือก CABLE</b></li>
-    <li><b>Noise suppression</b>: ตั้งเป็น <b>Off</b> หรือ <b>Low</b> เพราะระบบตัดเสียงรบกวนของ Teams อาจตัดเสียงหึ่งของ robot จนขาดเป็นช่วงๆ</li>
+    <li><b>Noise suppression</b>: ตั้งเป็น <b>Off</b> หรือ <b>Low</b> เพราะระบบตัดเสียงรบกวนของ Teams อาจตัดเสียงหึ่งของ robot หรือเสียงกระซิบจนขาดเป็นช่วงๆ</li>
     <li>กด <b>Make a test call</b> เพื่อฟังเสียงที่คนอื่นจะได้ยิน</li>
   </ol>
   <div class="note">ถ้าไม่เจอ CABLE Output ใน Teams ให้ปิด Teams แล้วเปิดใหม่ (หลังจากติดตั้ง VB-CABLE และรีบูตแล้ว)
@@ -318,7 +352,7 @@
       สถานะต้องเป็น Processing และแถบ Output ต้องขยับ ลองกด Test beep → output ด้วย</td></tr>
     <tr><td>แถบ Input ไม่ขยับ</td><td>ไปที่ Windows Settings → Privacy &amp; security → Microphone แล้วเปิดสิทธิ์ให้ desktop apps
       เช็กว่าเลือกไมค์ถูกตัว และไมค์ไม่ได้ถูกปิดเสียงด้วยปุ่มบนเครื่อง</td></tr>
-    <tr><td>เสียง robot ใน Teams ขาดเป็นช่วงๆ</td><td>ตั้ง Noise suppression ใน Teams เป็น Off หรือ Low</td></tr>
+    <tr><td>เสียง robot หรือเสียงกระซิบใน Teams ขาดเป็นช่วงๆ</td><td>ตั้ง Noise suppression ใน Teams เป็น Off หรือ Low</td></tr>
     <tr><td>เสียงแตกหรือกระตุก และค่า underruns เพิ่มขึ้น</td><td>เครื่องทำงานหนักเกินไป ให้ปิดโปรแกรมที่ใช้ทรัพยากรมาก
       หรือแก้ <code>output_prebuffer_blocks</code> ใน <code>config.json</code> จาก 1 เป็น 2 (ความหน่วงจะเพิ่มขึ้นประมาณ 50 ms)</td></tr>
     <tr><td>"Could not open audio device"</td><td>มีโปรแกรมอื่นจองอุปกรณ์ไว้ ให้ไปที่ Sound Control Panel → เลือกอุปกรณ์ → Advanced →

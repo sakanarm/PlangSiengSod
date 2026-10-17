@@ -4,7 +4,7 @@ Microphone → real-time processing → **VB-CABLE** → Microsoft Teams.
 Runs on a normal Windows 10/11 laptop (Intel CPU/graphics). No NVIDIA GPU, no CUDA.
 
 ```
-[Physical mic] -> [this app: Robot voice / Pass-through] -> "CABLE Input" ==VB-CABLE==> "CABLE Output" -> [Teams microphone]
+[Physical mic] -> [this app: Robot / Other voices / Pass-through] -> "CABLE Input" ==VB-CABLE==> "CABLE Output" -> [Teams microphone]
 ```
 
 ## Status (v0.1 – "lite")
@@ -12,6 +12,7 @@ Runs on a normal Windows 10/11 laptop (Intel CPU/graphics). No NVIDIA GPU, no CU
 | Feature | Status |
 |---|---|
 | Robot voice v1 (DSP effect, **not AI**) | ✅ working, tested on real devices |
+| Other voices: 6 person-like voices + 6 effects (DSP, **not AI**), live switching | ✅ working, tested on real devices |
 | Pass-through (routing test) | ✅ |
 | VB-CABLE detection, feedback-loop protection, test beep | ✅ |
 | Level meters, measured latency / drops / underruns / errors, CPU & RAM | ✅ |
@@ -21,6 +22,22 @@ Runs on a normal Windows 10/11 laptop (Intel CPU/graphics). No NVIDIA GPU, no CU
 
 The robot voice is a classic signal-processing effect (STFT phase zeroing + optional ring
 modulation). It does not imitate any person and needs no model or download.
+
+**Other voices** (`rtvc/audio/voices.py`) are DSP too: a phase-vocoder pitch shift with a separate
+formant (spectral-envelope) shift, plus simple effects. Pitch / formant can be fine-tuned live.
+
+| Voice | Pitch (st) | Formant (st) | Notes |
+|---|---|---|---|
+| Deep male (default) / Big man / Young male | −4 / −6 / +3 | −2 / −3.5 / +1 | |
+| Female / Soft female / Child | +8 / +6 / +11 | +3 / +2.5 / +4.5 | |
+| Chipmunk / Monster | +12 / −7 | +8 / −5 | Monster adds saturation |
+| Radio / Cave | 0 / 0 | 0 / 0 | band-pass + drive / convolution reverb |
+| Whisper | – | – | pitch removed entirely, breathy noise + light echo |
+| Alien | +3 | +3 | vibrato + ring modulation |
+
+Limits: these effects change pitch and timbre but keep your rhythm, accent and intonation, so
+people who know you may still recognise you. Algorithmic latency is ~43 ms (Radio/Cave ~64 ms),
+plus buffering and device latency.
 
 ## Quick start
 
@@ -42,7 +59,7 @@ Press **■ Stop recording** or **Stop** to finish. Files stay on this PC and ar
 ### เริ่มใช้งานแบบย่อ (ภาษาไทย)
 1. ติดตั้ง VB-CABLE เอง (ต้องใช้สิทธิ์ admin + รีบูต) – ดู [docs/INSTALL_WINDOWS.md](docs/INSTALL_WINDOWS.md)
 2. `setup.ps1` แล้ว `run.ps1`
-3. ในแอป: Microphone = ไมค์จริง, Output → Teams = **CABLE Input** → กด **Start**
+3. ในแอป: Microphone = ไมค์จริง, Output → Teams = **CABLE Input** → เลือก **Robot voice** หรือ **Other voices / เสียงอื่น** (แล้วเลือกเสียง) → กด **Start** (เปลี่ยนเสียงระหว่างทำงานได้เลย)
 4. ใน Teams: Settings → Devices → Microphone = **CABLE Output**
 5. แจ้งผู้ร่วมประชุมว่ากำลังใช้เอฟเฟกต์เสียง
 6. อยากได้ไฟล์เสียง: ระหว่างที่รันอยู่ กด **● Record** → เลือกที่เก็บไฟล์ → กด **■ Stop recording** ระบบจะได้ไฟล์ .wav ของเสียงที่แปลงแล้ว (ค่าเริ่มต้นอยู่ในโฟลเดอร์ `recordings/`)
